@@ -3110,7 +3110,7 @@ void sym.malloc(size_t size, ...)
 {
     // WARNING: Could not recover jumptable at 0x0001400011c0. Too many branches
     // WARNING: Treating indirect jump as call
-    (*_sym.imp.msvcrt.dll_malloc)();
+    sym.imp.msvcrt.dll_malloc(size);
     return;
 }
 EOF
@@ -3157,7 +3157,7 @@ void sym.fprintf(FILE *stream, char *format, ...)
 {
     // WARNING: Could not recover jumptable at 0x0001400011a0. Too many branches
     // WARNING: Treating indirect jump as call
-    (*_sym.imp.msvcrt.dll_fprintf)();
+    sym.imp.msvcrt.dll_fprintf(stream, format);
     return;
 }
 EOF
@@ -3189,7 +3189,7 @@ void sym.vprintf(char *format, va_list ap, ...)
 {
     // WARNING: Could not recover jumptable at 0x000140001210. Too many branches
     // WARNING: Treating indirect jump as call
-    (*_sym.imp.msvcrt.dll_vprintf)();
+    sym.imp.msvcrt.dll_vprintf(format, ap);
     return;
 }
 EOF
@@ -3235,7 +3235,7 @@ void sym.api_large(aggregate *record, int marker, ...)
 {
     // WARNING: Could not recover jumptable at 0x000140001180. Too many branches
     // WARNING: Treating indirect jump as call
-    (*_sym.imp.import_args_api.dll_api_large)();
+    sym.imp.import_args_api.dll_api_large(record, marker);
     return;
 }
 
@@ -3243,7 +3243,270 @@ void sym.api_return(aggregate *rethidden, int marker, ...)
 {
     // WARNING: Could not recover jumptable at 0x000140001190. Too many branches
     // WARNING: Treating indirect jump as call
-    (*_sym.imp.import_args_api.dll_api_return)();
+    sym.imp.import_args_api.dll_api_return(rethidden, marker);
+    return;
+}
+EOF
+RUN
+
+NAME=import slot call (fixed args, 16-bit truncation)
+FILE=bins/import-direct.exe
+CMDS=<<EOF
+aaa
+pdg @ sym.direct_fixed
+pdg @ sym.direct_truncate
+EOF
+EXPECT=<<EOF
+
+// WARNING: [rz-ghidra] Variable var_4h extends beyond the stackframe. Try changing its type to something smaller.
+
+uint64_t sym.direct_fixed(FILE *stream)
+{
+    int32_t iVar1;
+    int64_t iVar2;
+    uint64_t uVar3;
+    void *ptr;
+    
+    // [00] -r-x section size 4096 named .text
+    iVar2 = sym.imp.msvcrt.dll_fread(&ptr, 8, 1, stream);
+    uVar3 = 0xffffffff;
+    if (iVar2 == 1) {
+        iVar1 = sym.imp.msvcrt.dll_memcmp(&ptr, "INV1", 4);
+        uVar3 = 0xfffffffe;
+        if (iVar1 == 0) {
+            return (uint64_t)ptr._4_2_;
+        }
+    }
+    return uVar3;
+}
+
+void sym.direct_truncate(int64_t arg1)
+{
+    sym.imp.msvcrt.dll_malloc((uint64_t)(uint16_t)(*(int16_t *)(arg1 + 6) + 1));
+    return;
+}
+EOF
+RUN
+
+NAME=import slot call (variable args stay at the count of the call)
+FILE=bins/import-direct.exe
+CMDS=<<EOF
+aaa
+pdg @ sym.direct_printf
+pdg @ sym.direct_fprintf
+pdg @ sym.direct_vprintf
+EOF
+EXPECT=<<EOF
+
+// WARNING: Variable defined which should be unmapped: var_18h
+// WARNING: Variable defined which should be unmapped: var_10h
+// WARNING: Variable defined which should be unmapped: var_8h
+
+void sym.direct_printf(void)
+{
+    int var_18h;
+    int var_10h;
+    int64_t var_8h;
+    
+    sym.imp.msvcrt.dll_printf("%d %d %d %d %d %d", 0xb, 0x16, 0x21, 0x2c, 0x37, 0x42);
+    return;
+}
+
+void sym.direct_fprintf(FILE *stream, undefined8 placeholder_1, void *va_args)
+{
+    sym.imp.msvcrt.dll_fprintf(stream, "plain text");
+    return;
+}
+
+void sym.direct_vprintf(char *format, va_list ap)
+{
+    sym.imp.msvcrt.dll_vprintf(format, ap);
+    return;
+}
+EOF
+RUN
+
+NAME=import slot call (aggregate arg and aggregate return)
+FILE=bins/import-direct.exe
+CMDS=<<EOF
+to bins/import-args.h
+aaa
+pdg @ sym.direct_large
+pdg @ sym.direct_return
+EOF
+EXPECT=<<EOF
+
+// WARNING: [rz-ghidra] Detected overlap for variable var_8h
+
+void sym.direct_large(void)
+{
+    aggregate record;
+    
+    record.first._0_4_ = 0xb;
+    record.first._4_4_ = 0;
+    record.second._0_4_ = 0x16;
+    record.second._4_4_ = 0;
+    record.third = 0x21;
+    sym.imp.import_args_api.dll_api_large(&record, 0x4d);
+    return;
+}
+
+int64_t sym.direct_return(void)
+{
+    int marker;
+    int64_t var_8h;
+    
+    sym.imp.import_args_api.dll_api_return((aggregate *)&marker, 0x4d);
+    return var_8h;
+}
+EOF
+RUN
+
+NAME=import slot call (no return, and no change for a slot as data or another pointer)
+FILE=bins/import-direct.exe
+CMDS=<<EOF
+aaa
+pdg @ sym.direct_exit
+pdg @ sym.direct_address
+pdg @ sym.direct_callback
+EOF
+EXPECT=<<EOF
+
+int32_t sym.direct_exit(long long unsigned int arg1)
+{
+    uint32_t uExitCode;
+    
+    uExitCode = (uint32_t)arg1;
+    if (uExitCode < 4) {
+        return uExitCode + 1;
+    }
+    // WARNING: Subroutine does not return
+    sym.imp.KERNEL32.dll_ExitProcess(uExitCode);
+}
+
+undefined8 sym.direct_address(void)
+{
+    return _sym.imp.msvcrt.dll_malloc;
+}
+
+int32_t sym.direct_callback(void)
+{
+    int32_t iVar1;
+    
+    iVar1 = (**(code **)0x140004000)();
+    return iVar1 + 1;
+}
+EOF
+RUN
+
+NAME=import slot call (32-bit PE, stdcall and cdecl imports)
+FILE=bins/import-direct32.exe
+CMDS=<<EOF
+aaa
+pdg @ sym._direct_mixed
+EOF
+EXPECT=<<EOF
+
+int32_t __cdecl sym._direct_mixed(FILE **stream)
+{
+    DWORD dwMilliseconds;
+    undefined4 uVar1;
+    
+    // [00] -r-x section size 4096 named .text
+    sym.imp.import_direct32_api.dll_Sleep(100);
+    dwMilliseconds = sym.imp.import_direct32_api.dll_fread(&stack0xffffffe0, 1, 0x10, stream);
+    sym.imp.import_direct32_api.dll_MessageBoxA((HWND)0x0, &stack0xffffffe0, "caption", 3);
+    uVar1 = sym.imp.import_direct32_api.dll_GetTickCount();
+    sym.imp.import_direct32_api.dll_printf("%u %lu %u", dwMilliseconds, uVar1, 7);
+    sym.imp.import_direct32_api.dll_Sleep(dwMilliseconds);
+    return dwMilliseconds + 1;
+}
+EOF
+RUN
+
+NAME=reloc target signature (fixed args, variable args, no return)
+FILE=bins/import-reloc.o
+CMDS=<<EOF
+aaa
+pdg @ sym.reloc_fixed
+pdg @ sym.reloc_truncate
+pdg @ sym.reloc_printf
+pdg @ sym.reloc_vprintf
+pdg @ sym.reloc_exit
+EOF
+EXPECT=<<EOF
+
+// WARNING: [rz-ghidra] Variable var_4h extends beyond the stackframe. Try changing its type to something smaller.
+
+uint64_t sym.reloc_fixed(int64_t arg1)
+{
+    undefined8 in_RAX;
+    int64_t iVar1;
+    uint64_t uVar2;
+    undefined auStack_8 [4];
+    uint16_t uStack_4;
+    
+    // [02] -r-x section size 176 named .text
+    uStack_4 = (uint16_t)((uint64_t)in_RAX >> 0x20);
+    iVar1 = fread(auStack_8, 8, 1, (FILE *)arg1);
+    uVar2 = 0xffffffff;
+    if (iVar1 == 1) {
+        uVar2 = (uint64_t)uStack_4;
+    }
+    return uVar2;
+}
+
+void sym.reloc_truncate(int64_t arg1)
+{
+    malloc((uint64_t)(uint16_t)(*(int16_t *)(arg1 + 6) + 1));
+    return;
+}
+
+void sym.reloc_printf(void)
+{
+    printf("%d %d %d %d %d %d %d", 0xb, 0x16, 0x21, 0x2c, 0x37, 0x42, 0x4d);
+    return;
+}
+
+void sym.reloc_vprintf(char *param_1, va_list param_2)
+{
+    vprintf(param_1, param_2);
+    return;
+}
+
+int32_t sym.reloc_exit(int64_t arg1)
+{
+    int32_t status;
+    
+    status = (int32_t)arg1;
+    if (status < 4) {
+        return status + 1;
+    }
+    // WARNING: Subroutine does not return
+    exit(status);
+}
+EOF
+RUN
+
+NAME=import slot call (review 1006, no change for an indexed call or a slot that the function writes)
+FILE=bins/import-direct32.exe
+CMDS=<<EOF
+aaa
+pdg @ sym._direct_indexed
+pdg @ sym._direct_overwrite
+EOF
+EXPECT=<<EOF
+
+void __cdecl sym._direct_indexed(int32_t arg_4h)
+{
+    (**(code **)(sym.imp.import_direct32_api.dll_fread + arg_4h * 4))(0x17);
+    return;
+}
+
+void __cdecl sym._direct_overwrite(int32_t arg_4h)
+{
+    _sym.imp.import_direct32_api.dll_fread = arg_4h;
+    (*(code *)arg_4h)(0x17);
     return;
 }
 EOF
@@ -3359,48 +3622,48 @@ undefined8 main(int argc)
     char *s;
     
     // [00] -r-x section size 4096 named .text
-    (*_sym.imp.api_ms_win_crt_utility_l1_1_0.dll_srand)();
+    sym.imp.api_ms_win_crt_utility_l1_1_0.dll_srand(argc);
     // switch table (99 cases) at 0x140001148
     switch(argc) {
     case 1:
-        (*_sym.imp.api_ms_win_crt_stdio_l1_1_0.dll_puts)("case 1");
+        sym.imp.api_ms_win_crt_stdio_l1_1_0.dll_puts("case 1");
         return 0;
     case 2:
-        (*_sym.imp.api_ms_win_crt_stdio_l1_1_0.dll_puts)("case 2");
+        sym.imp.api_ms_win_crt_stdio_l1_1_0.dll_puts("case 2");
         return 0;
     default:
-        (*_sym.imp.api_ms_win_crt_stdio_l1_1_0.dll_puts)(s);
+        sym.imp.api_ms_win_crt_stdio_l1_1_0.dll_puts(s);
         return 0;
     case 10:
-        (*_sym.imp.api_ms_win_crt_stdio_l1_1_0.dll_puts)("case 10");
+        sym.imp.api_ms_win_crt_stdio_l1_1_0.dll_puts("case 10");
         return 0;
     case 0xb:
-        (*_sym.imp.api_ms_win_crt_stdio_l1_1_0.dll_puts)("case 11");
+        sym.imp.api_ms_win_crt_stdio_l1_1_0.dll_puts("case 11");
         return 0;
     case 0xd:
-        (*_sym.imp.api_ms_win_crt_stdio_l1_1_0.dll_puts)("case 13");
+        sym.imp.api_ms_win_crt_stdio_l1_1_0.dll_puts("case 13");
         return 0;
     case 0xf:
     case 0x10:
-        (*_sym.imp.api_ms_win_crt_stdio_l1_1_0.dll_puts)("case 15 and 16");
+        sym.imp.api_ms_win_crt_stdio_l1_1_0.dll_puts("case 15 and 16");
         return 0;
     case 0x13:
-        (*_sym.imp.api_ms_win_crt_stdio_l1_1_0.dll_puts)("case 19");
+        sym.imp.api_ms_win_crt_stdio_l1_1_0.dll_puts("case 19");
         return 0;
     case 0x14:
-        (*_sym.imp.api_ms_win_crt_stdio_l1_1_0.dll_puts)("case 20");
+        sym.imp.api_ms_win_crt_stdio_l1_1_0.dll_puts("case 20");
         return 0;
     case 0x1e:
-        (*_sym.imp.api_ms_win_crt_stdio_l1_1_0.dll_puts)("case 30");
+        sym.imp.api_ms_win_crt_stdio_l1_1_0.dll_puts("case 30");
         return 0;
     case 0x32:
-        (*_sym.imp.api_ms_win_crt_stdio_l1_1_0.dll_puts)("case 50");
+        sym.imp.api_ms_win_crt_stdio_l1_1_0.dll_puts("case 50");
         return 0;
     case 0x61:
-        (*_sym.imp.api_ms_win_crt_stdio_l1_1_0.dll_puts)("case 97");
+        sym.imp.api_ms_win_crt_stdio_l1_1_0.dll_puts("case 97");
         return 0;
     case 99:
-        (*_sym.imp.api_ms_win_crt_stdio_l1_1_0.dll_puts)("case 99");
+        sym.imp.api_ms_win_crt_stdio_l1_1_0.dll_puts("case 99");
         return 0;
     }
 }

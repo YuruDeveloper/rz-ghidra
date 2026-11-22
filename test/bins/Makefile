@@ -31,3 +31,19 @@ import-args.exe: import-args.c import-args.h import-args.def
 	llvm-dlltool -m i386:x86-64 -d import-args.def -l libimport-args-api.a
 	clang --target=x86_64-w64-windows-gnu -O1 -fno-builtin -fno-optimize-sibling-calls -nostdlib -Wl,-e,probe_main -o import-args.exe import-args.c -L. -limport-args-api -lmsvcrt-os
 	rm -f libimport-args-api.a
+
+# The same toolchain. The imports have the dllimport attribute, so each call is a "call [IAT]".
+import-direct.exe: import-direct.c import-args.def
+	llvm-dlltool -m i386:x86-64 -d import-args.def -l libimport-args-api.a
+	clang --target=x86_64-w64-windows-gnu -O1 -fno-builtin -fno-optimize-sibling-calls -nostdlib -Wl,-e,direct_main -o import-direct.exe import-direct.c -L. -limport-args-api -lmsvcrt-os -lkernel32
+	rm -f libimport-args-api.a
+
+# A PE for x86 with 32 bits. The import library has stdcall and cdecl functions.
+import-direct32.exe: import-direct32.c import-direct32.def
+	llvm-dlltool -m i386 -k -d import-direct32.def -l libimport-direct32-api.a
+	clang --target=i686-w64-windows-gnu -O1 -fno-builtin -fno-optimize-sibling-calls -nostdlib -Wl,-e,_direct_main -o import-direct32.exe import-direct32.c -L. -limport-direct32-api
+	rm -f libimport-direct32-api.a
+
+# An ELF object file for x86-64. Each call of an import has a reloc.
+import-reloc.o: import-reloc.c
+	clang --target=x86_64-unknown-linux-gnu -O1 -fno-builtin -fno-optimize-sibling-calls -fno-pic -c -o import-reloc.o import-reloc.c

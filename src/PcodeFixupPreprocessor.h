@@ -12,6 +12,9 @@ class PcodeFixupPreprocessor
 {
 	public:
 		static void fixupSharedReturnJumpToRelocs(RzAnalysisFunction *function, ghidra::Funcdata *func, RzCore *core, RizinArchitecture &arch);
+		static void fixupCallsThroughImportSlots(RzAnalysisFunction *function, ghidra::Funcdata *func, RzCore *core, RizinArchitecture &arch);
+		// For a decompiled function. Returns true if the function must be decompiled again.
+		static bool fixupCallsOfImportSlotValues(ghidra::Funcdata *func, RzCore *core, RizinArchitecture &arch);
 };
 
 #endif

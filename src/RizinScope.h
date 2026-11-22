@@ -32,9 +32,11 @@ class RizinScope : public ghidra::Scope
 
 		ghidra::FunctionSymbol *registerFunction(RzAnalysisFunction *fcn) const;
 		ghidra::FunctionSymbol *registerRelocTarget(RzBinReloc *reloc) const;
+		ghidra::FunctionSymbol *registerImportFunction(const ghidra::Address &addr, const char *name, const char *typeName) const;
 		ghidra::Symbol *registerFlag(RzFlagItem *flag) const;
 		ghidra::Symbol *registerGlobalVar(RzAnalysisVarGlobal *glob) const;
 		ghidra::Symbol *queryRizinAbsolute(ut64 addr, bool contain) const;
+		ghidra::FunctionSymbol *queryRizinImport(ut64 slotAddr) const;
 		ghidra::Symbol *queryRizin(const ghidra::Address &addr, bool contain) const;
 		ghidra::LabSymbol *queryRizinFunctionLabel(const ghidra::Address &addr) const;
 
