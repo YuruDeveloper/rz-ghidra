@@ -4055,6 +4055,146 @@ void sym.writable_constant(void)
 EOF
 RUN
 
+# The callers give the address of a small local and small values to functions of the same file.
+# Rizin must not make the argument of the callee smaller because of the local of the caller.
+# call_compared compares its local as an unsigned value before it gives the address.
+# call_widen gives a local with the type int from atoi to an argument of 8 bytes.
+# The type FILE * from the return value of fopen must go to the argument of keep_stream.
+NAME=callee arguments keep the register width (address and value of a small local)
+FILE=bins/callee-arg-width.exe
+CMDS=<<EOF
+aaa
+afs @ sym.fill_int
+afs @ sym.fill_wide
+afs @ sym.take_int
+afs @ sym.take_unsigned
+afs @ sym.take_long
+afs @ sym.keep_stream
+afs @ sym.bump_short
+pdg @ sym.fill_int
+pdg @ sym.fill_wide
+pdg @ sym.take_int
+pdg @ sym.take_unsigned
+pdg @ sym.take_long
+pdg @ sym.keep_stream
+pdg @ sym.bump_short
+pdg @ sym.call_address
+pdg @ sym.call_address_int
+pdg @ sym.call_value
+pdg @ sym.call_widen
+pdg @ sym.call_stream
+pdg @ sym.call_compared
+EOF
+EXPECT=<<EOF
+void sym.fill_int(int64_t arg1 @ rcx);
+void sym.fill_wide(int64_t arg1 @ rcx);
+void sym.take_int(int64_t arg1 @ rcx);
+void sym.take_unsigned(int64_t arg1 @ rcx);
+void sym.take_long(int64_t arg1 @ rcx, int64_t arg2 @ rdx);
+void sym.keep_stream(FILE *arg1 @ rcx);
+void sym.bump_short(int64_t arg1 @ rcx);
+
+void sym.fill_int(int64_t arg1)
+{
+    *(undefined4 *)arg1 = 5;
+    return;
+}
+
+void sym.fill_wide(int64_t arg1)
+{
+    *(undefined8 *)arg1 = 7;
+    return;
+}
+
+int32_t sym.take_int(int64_t arg1)
+{
+    return (int32_t)arg1 + 100000;
+}
+
+uint64_t sym.take_unsigned(int64_t arg1)
+{
+    return (arg1 & 0xffffffffU) / 3;
+}
+
+int64_t sym.take_long(int64_t arg1, int64_t arg2)
+{
+    return arg1 / 3;
+}
+
+bool sym.keep_stream(FILE *arg1)
+{
+    return arg1 != (FILE *)0x0;
+}
+
+void sym.bump_short(int64_t arg1)
+{
+    *(int16_t *)arg1 = *(int16_t *)arg1 + 1;
+    return;
+}
+
+int32_t sym.call_address(void)
+{
+    int16_t var_2h;
+    
+    var_2h = 3;
+    sym.fill_int((int64_t)&var_2h);
+    return (int32_t)var_2h;
+}
+
+int32_t sym.call_address_int(void)
+{
+    int32_t var_4h;
+    
+    var_4h = 3;
+    sym.fill_wide((int64_t)&var_4h);
+    return var_4h;
+}
+
+int32_t sym.call_value(void)
+{
+    int32_t iVar1;
+    int32_t iVar2;
+    int8_t var_bh;
+    int16_t var_ah;
+    
+    iVar1 = sym.take_int(3);
+    iVar2 = sym.take_unsigned(200);
+    return iVar2 + iVar1;
+}
+
+void sym.call_widen(char *str)
+{
+    int iVar1;
+    int64_t in_RDX;
+    int var_4h;
+    
+    iVar1 = sym.atoi(str);
+    sym.take_long((int64_t)iVar1, in_RDX);
+    return;
+}
+
+void sym.call_stream(char *filename)
+{
+    FILE *arg1;
+    FILE *var_8h;
+    
+    arg1 = sym.fopen(filename, "r");
+    sym.keep_stream(arg1);
+    return;
+}
+
+uint16_t sym.call_compared(void)
+{
+    uint16_t var_8h;
+    
+    // [00] -r-x section size 4096 named .text
+    var_8h = 200;
+    sym.bump_short((int64_t)&var_8h);
+    return var_8h;
+}
+EOF
+RUN
+
 NAME=reloc target functions
 FILE=rizin-testbins/elf/linux-example-x86-32.ko
 CMDS=<<EOF
