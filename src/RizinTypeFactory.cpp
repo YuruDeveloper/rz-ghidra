@@ -7,6 +7,8 @@
 #include <rz_core.h>
 #include <rz_type.h>
 
+#include <limits>
+
 #include "RizinUtils.h"
 
 using namespace ghidra;
@@ -39,6 +41,10 @@ Datatype *RizinTypeFactory::addRizinStruct(RzBaseType *type, StackTypes &stack_t
 		}
 		void *it;
 		RzTypeDB *typedb = rz_analysis_get_type_db(core->analysis);
+		ut64 layout_size = type->size / 8;
+		bool has_layout = layout_size != 0 && layout_size <= (ut64)std::numeric_limits<int4>::max();
+		ut64 layout_end = 0;
+		std::vector<ut64> layout_offsets;
 		rz_vector_foreach_cpp<RzTypeStructMember>(&type->struct_data.members, [&](RzTypeStructMember *member) {
 			if(!member->type || !member->name)
 				return;
@@ -64,14 +70,27 @@ Datatype *RizinTypeFactory::addRizinStruct(RzBaseType *type, StackTypes &stack_t
 			};
 			fields.push_back(tf);
 
+			ut64 member_size = (ut64)member_type->getSize();
+			if(member->offset < layout_end || member->offset > layout_size || member_size > layout_size - member->offset)
+				has_layout = false;
+			else
+				layout_end = member->offset + member_size;
+			layout_offsets.push_back(member->offset);
+
 			// TODO: right now, we track member offset ourselves
 			// which means all structs are assumed to be packed.
 			// This should be changed if there is a clear notion of the offset in rizin at some point.
-			offset += rz_type_db_get_bitsize(typedb, member->type) / 8;
+			ut64 packed_size = rz_type_db_get_bitsize(typedb, member->type) / 8;
+			offset += packed_size > member_size ? packed_size : member_size;
 		});
 		std::vector<TypeBitField> bitfields;
 		int4 align = 1; // TODO: take this from rizin if available in the future
-		int4 size = offset + rz_num_align_delta(offset, align);
+		for(size_t i = 0; has_layout && i < fields.size(); i++)
+		{
+			fields[i].ident = (int4)layout_offsets[i];
+			fields[i].offset = (int4)layout_offsets[i];
+		}
+		int4 size = has_layout ? (int4)layout_size : (int4)(offset + rz_num_align_delta(offset, align));
 		setFields(fields, bitfields, r, size, align, 0);
 		return r;
 	}

@@ -74,6 +74,14 @@ pointer-string.exe: pointer-string.c
 callback-flag.exe: callback-flag.c
 	clang --target=x86_64-w64-windows-gnu -O1 -fno-builtin -fno-optimize-sibling-calls -nostdlib -Wl,-e,callback_main -o callback-flag.exe callback-flag.c -lmsvcrt-os
 
+# Two PE files for x86-64 with DWARF data for structures. The first file has the default DWARF version.
+# The second file has DWARF 2, where the offset of a structure member is a location expression.
+struct-offset.exe: struct-offset.c
+	clang --target=x86_64-w64-windows-gnu -O1 -g -fno-builtin -fno-optimize-sibling-calls -nostdlib -Wl,-e,struct_main -o struct-offset.exe struct-offset.c
+
+struct-offset-dwarf2.exe: struct-offset.c
+	clang --target=x86_64-w64-windows-gnu -O1 -g -gdwarf-2 -fno-builtin -fno-optimize-sibling-calls -nostdlib -Wl,-e,struct_main -o struct-offset-dwarf2.exe struct-offset.c
+
 # A PE for x86-64. A string starts in a read-only section and continues in a writable section.
 string-boundary.exe: string-boundary.s
 	clang --target=x86_64-w64-windows-gnu -nostdlib -Wl,-e,ProbeBoundary -Wl,--export-all-symbols -o string-boundary.exe string-boundary.s -lmsvcrt-os
