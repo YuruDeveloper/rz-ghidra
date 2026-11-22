@@ -9,6 +9,8 @@ extern void *malloc(unsigned long long size);
 extern int printf(const char *format, ...);
 extern int fprintf(void *stream, const char *format, ...);
 extern int sprintf(char *buffer, const char *format, ...);
+extern int vprintf(const char *format, char *list);
+extern int vfprintf(void *stream, const char *format, char *list);
 
 struct header {
 	char magic[4];
@@ -42,6 +44,14 @@ __attribute__((noinline)) int probe_fprintf(void *stream) {
 
 __attribute__((noinline)) int probe_sprintf(char *buffer) {
 	return sprintf(buffer, "plain text");
+}
+
+__attribute__((noinline)) int probe_vprintf(const char *format, char *list) {
+	return vprintf(format, list);
+}
+
+__attribute__((noinline)) int probe_vfprintf(void *stream, const char *format, char *list) {
+	return vfprintf(stream, format, list);
 }
 
 __attribute__((noinline)) void probe_large(void) {

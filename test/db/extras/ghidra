@@ -3108,7 +3108,7 @@ void sym.probe_truncate(int64_t arg1)
 
 void sym.malloc(size_t size, ...)
 {
-    // WARNING: Could not recover jumptable at 0x0001400011a0. Too many branches
+    // WARNING: Could not recover jumptable at 0x0001400011c0. Too many branches
     // WARNING: Treating indirect jump as call
     (*_sym.imp.msvcrt.dll_malloc)();
     return;
@@ -3155,9 +3155,41 @@ void sym.probe_sprintf(char *s, undefined8 placeholder_1, va_list args)
 
 void sym.fprintf(FILE *stream, char *format, ...)
 {
-    // WARNING: Could not recover jumptable at 0x000140001180. Too many branches
+    // WARNING: Could not recover jumptable at 0x0001400011a0. Too many branches
     // WARNING: Treating indirect jump as call
     (*_sym.imp.msvcrt.dll_fprintf)();
+    return;
+}
+EOF
+RUN
+
+NAME=import thunk signature (a va_list arg is a fixed arg)
+FILE=bins/import-args.exe
+CMDS=<<EOF
+aaa
+pdg @ sym.probe_vprintf
+pdg @ sym.probe_vfprintf
+pdg @ sym.vprintf
+EOF
+EXPECT=<<EOF
+
+void sym.probe_vprintf(char *format, va_list ap)
+{
+    sym.vprintf(format, ap);
+    return;
+}
+
+void sym.probe_vfprintf(FILE *stream, char *format, va_list ap)
+{
+    sym.vfprintf(stream, format, ap);
+    return;
+}
+
+void sym.vprintf(char *format, va_list ap, ...)
+{
+    // WARNING: Could not recover jumptable at 0x000140001210. Too many branches
+    // WARNING: Treating indirect jump as call
+    (*_sym.imp.msvcrt.dll_vprintf)();
     return;
 }
 EOF
@@ -3201,7 +3233,7 @@ int64_t sym.probe_return(void)
 
 void sym.api_large(aggregate *record, int marker, ...)
 {
-    // WARNING: Could not recover jumptable at 0x000140001160. Too many branches
+    // WARNING: Could not recover jumptable at 0x000140001180. Too many branches
     // WARNING: Treating indirect jump as call
     (*_sym.imp.import_args_api.dll_api_large)();
     return;
@@ -3209,7 +3241,7 @@ void sym.api_large(aggregate *record, int marker, ...)
 
 void sym.api_return(aggregate *rethidden, int marker, ...)
 {
-    // WARNING: Could not recover jumptable at 0x000140001170. Too many branches
+    // WARNING: Could not recover jumptable at 0x000140001190. Too many branches
     // WARNING: Treating indirect jump as call
     (*_sym.imp.import_args_api.dll_api_return)();
     return;

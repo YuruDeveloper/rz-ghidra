@@ -711,11 +711,13 @@ FunctionSymbol *RizinScope::registerFunction(RzAnalysisFunction *fcn) const
 				if(!arg || !arg->type)
 					return false;
 				// The type database writes the variable part of some functions as a last
-				// fixed arg, for example "void *va_args" in fprintf and "va_list args" in sprintf.
-				// A call site supplies it or not, so the decompiler must find it there.
+				// fixed arg: "void *va_args" in fprintf and fscanf, "va_list args" in sprintf,
+				// snprintf and sscanf. A call site supplies it or not, so the decompiler must
+				// find it there. Other names are real args, for example "va_list ap" in vprintf.
 				const bool isLast = arg == rz_pvector_tail(signature->args);
 				const bool isVaList = arg->type->kind == RZ_TYPE_KIND_IDENTIFIER && arg->type->identifier.name && !strcmp(arg->type->identifier.name, "va_list");
-				if(isLast && (isVaList || (arg->name && !strcmp(arg->name, "va_args"))))
+				const bool isPlaceholder = arg->name && (!strcmp(arg->name, "va_args") || (isVaList && !strcmp(arg->name, "args")));
+				if(isLast && isPlaceholder)
 					return true;
 				std::string typeError;
 				Datatype *type = arch->getTypeFactory()->fromRzType(arg->type, &typeError);
