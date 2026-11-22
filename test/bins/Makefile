@@ -43,3 +43,7 @@ import-direct32.exe: import-direct32.c import-direct32.def
 	llvm-dlltool -m i386 -k -d import-direct32.def -l libimport-direct32-api.a
 	clang --target=i686-w64-windows-gnu -O1 -fno-builtin -fno-optimize-sibling-calls -nostdlib -Wl,-e,_direct_main -o import-direct32.exe import-direct32.c -L. -limport-direct32-api
 	rm -f libimport-direct32-api.a
+
+# An ELF object file for x86-64. Each call of an import has a reloc.
+import-reloc.o: import-reloc.c
+	clang --target=x86_64-unknown-linux-gnu -O1 -fno-builtin -fno-optimize-sibling-calls -fno-pic -c -o import-reloc.o import-reloc.c

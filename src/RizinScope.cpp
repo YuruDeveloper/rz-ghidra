@@ -894,11 +894,11 @@ FunctionSymbol *RizinScope::registerRelocTarget(RzBinReloc *reloc) const
 	RzCoreLock core(arch->getCore());
 	if(!reloc->import || !reloc->import->name)
 		return nullptr;
-	return cache->addFunction(Address(arch->getDefaultCodeSpace(), reloc->target_vaddr), reloc->import->name);
+	return registerImportFunction(Address(arch->getDefaultCodeSpace(), reloc->target_vaddr), reloc->import->name, reloc->import->name);
 }
 
 // Makes the function symbol of an import that is not a function in Rizin.
-// The symbol gets the args of the type database signature of typeName.
+// The symbol gets the args and the noreturn property of the type database signature of typeName.
 FunctionSymbol *RizinScope::registerImportFunction(const Address &addr, const char *name, const char *typeName) const
 {
 	RzCoreLock core(arch->getCore());
@@ -906,6 +906,8 @@ FunctionSymbol *RizinScope::registerImportFunction(const Address &addr, const ch
 	if(!symbol)
 		return nullptr;
 	const RzCallable *signature = typeDbSignature(core, typeName);
+	if(signature && signature->noret)
+		symbol->getFunction()->getFuncProto().setNoReturn(true);
 	// The type factory makes the same choice for a callable type.
 	ProtoModel *proto = signature && signature->cc ? arch->protoModelFromRizinCC(signature->cc) : nullptr;
 	if(!proto)
