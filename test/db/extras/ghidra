@@ -1442,7 +1442,7 @@ void sym.Aeropause(Bright *bright, int32_t argc, char **argv)
         bright->ambassador = AMBASSADOR_PURE;
     } else {
         (bright->window).sunlight = bright->morning->saved_argv[1];
-        iVar3 = sym.imp.strcmp((bright->window).sunlight, data.0804a05c);
+        iVar3 = sym.imp.strcmp((bright->window).sunlight, (char *)data.0804a05c);
         if (iVar3 == 0) {
             bright->ambassador = AMBASSADOR_REASON;
         } else {
@@ -3012,7 +3012,7 @@ undefined8 main(void)
 {
     sym.imp.puts("Hello this is a regular string\n");
     sym.use_utf16(L"Henlo completely obsolete encoding\n");
-    sym.imp.fputws(L"This is a wiiiiiiiiiiiide string\n", stdout);
+    sym.imp.fputws(L"This is a wiiiiiiiiiiiide string\n", (FILE *)stdout);
     return 0;
 }
 EOF
@@ -3028,7 +3028,7 @@ pdg
 EOF
 EXPECT=<<EOF
 
-void sym.imp.exit noreturn (void)
+void sym.imp.exit noreturn (int status, ...)
 {
     // WARNING: Could not recover jumptable at 0x080483e8. Too many branches
     // WARNING: Treating indirect jump as call
@@ -3052,18 +3052,199 @@ EXPECT=<<EOF
 
 jstring sym.Java_JNIFoo_nativeFoo(JNIEnv *env, jobject obj)
 {
-    int64_t iVar1;
-    jstring pvVar2;
+    void *s;
+    jstring pvVar1;
     
-    iVar1 = sym.imp.malloc(0x1e);
-    if (iVar1 == 0) {
-        pvVar2 = (jstring)0x0;
+    s = (void *)sym.imp.malloc(0x1e);
+    if (s == (void *)0x0) {
+        pvVar1 = (jstring)0x0;
     } else {
-        sym.imp.memset(iVar1, 0, 0x1e);
-        pvVar2 = (*(*env)->NewStringUTF)(env, "foo: Test program of JNI.\\n");
-        sym.imp.free(0x650);
+        sym.imp.memset(s, 0, 0x1e);
+        pvVar1 = (*(*env)->NewStringUTF)(env, "foo: Test program of JNI.\\n");
+        sym.imp.free("foo: Test program of JNI.\\n");
     }
-    return pvVar2;
+    return pvVar1;
+}
+EOF
+RUN
+
+NAME=import thunk signature (fixed args, 16-bit truncation)
+FILE=bins/import-args.exe
+CMDS=<<EOF
+aaa
+pdg @ sym.probe_fixed
+pdg @ sym.probe_truncate
+pdg @ sym.malloc
+EOF
+EXPECT=<<EOF
+
+// WARNING: [rz-ghidra] Variable var_4h extends beyond the stackframe. Try changing its type to something smaller.
+
+uint64_t sym.probe_fixed(FILE *stream)
+{
+    int32_t iVar1;
+    int64_t iVar2;
+    uint64_t uVar3;
+    void *ptr;
+    
+    // [00] -r-x section size 4096 named .text
+    iVar2 = sym.fread(&ptr, 8, 1, stream);
+    uVar3 = 0xffffffff;
+    if (iVar2 == 1) {
+        iVar1 = sym.memcmp(&ptr, "INV1", 4);
+        uVar3 = 0xfffffffe;
+        if (iVar1 == 0) {
+            return (uint64_t)ptr._4_2_;
+        }
+    }
+    return uVar3;
+}
+
+void sym.probe_truncate(int64_t arg1)
+{
+    sym.malloc((uint64_t)(uint16_t)(*(int16_t *)(arg1 + 6) + 1));
+    return;
+}
+
+void sym.malloc(size_t size, ...)
+{
+    // WARNING: Could not recover jumptable at 0x0001400011c0. Too many branches
+    // WARNING: Treating indirect jump as call
+    (*_sym.imp.msvcrt.dll_malloc)();
+    return;
+}
+EOF
+RUN
+
+NAME=import thunk signature (variable args stay at the count of the call)
+FILE=bins/import-args.exe
+CMDS=<<EOF
+aaa
+pdg @ sym.probe_printf
+pdg @ sym.probe_fprintf
+pdg @ sym.probe_sprintf
+pdg @ sym.fprintf
+EOF
+EXPECT=<<EOF
+
+// WARNING: Variable defined which should be unmapped: var_18h
+// WARNING: Variable defined which should be unmapped: var_10h
+// WARNING: Variable defined which should be unmapped: var_8h
+
+void sym.probe_printf(void)
+{
+    int var_18h;
+    int var_10h;
+    int64_t var_8h;
+    
+    sym.printf("%d %d %d %d %d %d", 0xb, 0x16, 0x21, 0x2c, 0x37, 0x42);
+    return;
+}
+
+void sym.probe_fprintf(FILE *stream, undefined8 placeholder_1, void *va_args)
+{
+    sym.fprintf(stream, "plain text");
+    return;
+}
+
+void sym.probe_sprintf(char *s, undefined8 placeholder_1, va_list args)
+{
+    sym.sprintf(s, "plain text");
+    return;
+}
+
+void sym.fprintf(FILE *stream, char *format, ...)
+{
+    // WARNING: Could not recover jumptable at 0x0001400011a0. Too many branches
+    // WARNING: Treating indirect jump as call
+    (*_sym.imp.msvcrt.dll_fprintf)();
+    return;
+}
+EOF
+RUN
+
+NAME=import thunk signature (a va_list arg is a fixed arg)
+FILE=bins/import-args.exe
+CMDS=<<EOF
+aaa
+pdg @ sym.probe_vprintf
+pdg @ sym.probe_vfprintf
+pdg @ sym.vprintf
+EOF
+EXPECT=<<EOF
+
+void sym.probe_vprintf(char *format, va_list ap)
+{
+    sym.vprintf(format, ap);
+    return;
+}
+
+void sym.probe_vfprintf(FILE *stream, char *format, va_list ap)
+{
+    sym.vfprintf(stream, format, ap);
+    return;
+}
+
+void sym.vprintf(char *format, va_list ap, ...)
+{
+    // WARNING: Could not recover jumptable at 0x000140001210. Too many branches
+    // WARNING: Treating indirect jump as call
+    (*_sym.imp.msvcrt.dll_vprintf)();
+    return;
+}
+EOF
+RUN
+
+NAME=import thunk signature (aggregate arg and aggregate return)
+FILE=bins/import-args.exe
+CMDS=<<EOF
+to bins/import-args.h
+aaa
+pdg @ sym.probe_large
+pdg @ sym.probe_return
+pdg @ sym.api_large
+pdg @ sym.api_return
+EOF
+EXPECT=<<EOF
+
+// WARNING: [rz-ghidra] Detected overlap for variable var_8h
+
+void sym.probe_large(void)
+{
+    aggregate record;
+    
+    record.first._0_4_ = 0xb;
+    record.first._4_4_ = 0;
+    record.second._0_4_ = 0x16;
+    record.second._4_4_ = 0;
+    record.third = 0x21;
+    sym.api_large(&record, 0x4d);
+    return;
+}
+
+int64_t sym.probe_return(void)
+{
+    int marker;
+    int64_t var_8h;
+    
+    sym.api_return((aggregate *)&marker, 0x4d);
+    return var_8h;
+}
+
+void sym.api_large(aggregate *record, int marker, ...)
+{
+    // WARNING: Could not recover jumptable at 0x000140001180. Too many branches
+    // WARNING: Treating indirect jump as call
+    (*_sym.imp.import_args_api.dll_api_large)();
+    return;
+}
+
+void sym.api_return(aggregate *rethidden, int marker, ...)
+{
+    // WARNING: Could not recover jumptable at 0x000140001190. Too many branches
+    // WARNING: Treating indirect jump as call
+    (*_sym.imp.import_args_api.dll_api_return)();
+    return;
 }
 EOF
 RUN
