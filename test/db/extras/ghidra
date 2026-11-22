@@ -3078,7 +3078,7 @@ pdg @ sym.malloc
 EOF
 EXPECT=<<EOF
 
-// WARNING: [rz-ghidra] Variable var_4h extends beyond the stackframe. Try changing its type to something smaller.
+// WARNING: [rz-ghidra] Detected overlap for variable var_4h
 
 uint64_t sym.probe_fixed(FILE *stream)
 {
@@ -3137,7 +3137,7 @@ void sym.probe_printf(void)
 {
     int var_18h;
     int var_10h;
-    int64_t var_8h;
+    int32_t var_8h;
     
     sym.printf("%d %d %d %d %d %d", 0xb, 0x16, 0x21, 0x2c, 0x37, 0x42);
     return;
@@ -3266,7 +3266,7 @@ pdg @ sym.direct_truncate
 EOF
 EXPECT=<<EOF
 
-// WARNING: [rz-ghidra] Variable var_4h extends beyond the stackframe. Try changing its type to something smaller.
+// WARNING: [rz-ghidra] Detected overlap for variable var_4h
 
 uint64_t sym.direct_fixed(FILE *stream)
 {
@@ -3314,7 +3314,7 @@ void sym.direct_printf(void)
 {
     int var_18h;
     int var_10h;
-    int64_t var_8h;
+    int32_t var_8h;
     
     sym.imp.msvcrt.dll_printf("%d %d %d %d %d %d", 0xb, 0x16, 0x21, 0x2c, 0x37, 0x42);
     return;
@@ -3444,22 +3444,20 @@ pdg @ sym.reloc_exit
 EOF
 EXPECT=<<EOF
 
-// WARNING: [rz-ghidra] Variable var_4h extends beyond the stackframe. Try changing its type to something smaller.
-
 uint64_t sym.reloc_fixed(int64_t arg1)
 {
     undefined8 in_RAX;
     size_t sVar1;
     uint64_t uVar2;
     undefined auStack_8 [4];
-    uint16_t uStack_4;
+    int16_t var_4h;
     
     // [02] -r-x section size 176 named .text
-    uStack_4 = (uint16_t)((uint64_t)in_RAX >> 0x20);
+    var_4h = (int16_t)((uint64_t)in_RAX >> 0x20);
     sVar1 = fread(auStack_8, 8, 1, (FILE *)arg1);
     uVar2 = 0xffffffff;
     if (sVar1 == 1) {
-        uVar2 = (uint64_t)uStack_4;
+        uVar2 = (uint64_t)(uint16_t)var_4h;
     }
     return uVar2;
 }
@@ -3595,7 +3593,7 @@ int64_t __cdecl sym._return_wide(int32_t arg_4h)
 unkfloat10 __cdecl sym._return_double(int32_t arg_4h)
 {
     unkfloat10 Var1;
-    int32_t var_ch;
+    int64_t var_ch;
     
     Var1 = (unkfloat10)sym._api_double(arg_4h);
     return (unkfloat10)((double)Var1 + (double)Var1);
@@ -3674,7 +3672,7 @@ int64_t __cdecl sym._return_wide(int32_t arg_4h)
 unkfloat10 __cdecl sym._return_double(int32_t arg_4h)
 {
     unkfloat10 Var1;
-    int32_t var_ch;
+    int64_t var_ch;
     
     Var1 = (unkfloat10)sym.imp.import_return32_api.dll_api_double(arg_4h);
     return (unkfloat10)((double)Var1 + (double)Var1);
