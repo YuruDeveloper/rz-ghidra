@@ -93,3 +93,7 @@ string-boundary.exe: string-boundary.s
 # A PE for x86-64 with one string in a writable section and one string in a read-only section.
 writable-string.exe: writable-string.c
 	clang --target=x86_64-w64-windows-gnu -O1 -fno-builtin -fno-optimize-sibling-calls -nostdlib -Wl,-e,writable_main -o writable-string.exe writable-string.c -lmsvcrt-os
+
+# A PE for x86-64. The callers give the address of a small local and small values to functions of the same file.
+callee-arg-width.exe: callee-arg-width.c
+	clang --target=x86_64-w64-windows-gnu -O1 -fno-builtin -fno-optimize-sibling-calls -nostdlib -Wl,-e,width_main -o callee-arg-width.exe callee-arg-width.c -lmsvcrt-os
