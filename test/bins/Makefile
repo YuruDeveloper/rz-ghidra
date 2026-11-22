@@ -44,6 +44,12 @@ import-direct32.exe: import-direct32.c import-direct32.def
 	clang --target=i686-w64-windows-gnu -O1 -fno-builtin -fno-optimize-sibling-calls -nostdlib -Wl,-e,_direct_main -o import-direct32.exe import-direct32.c -L. -limport-direct32-api
 	rm -f libimport-direct32-api.a
 
+# A PE for x86-64 with thunks. One import has a signature without args, and one has no signature.
+import-noargs.exe: import-noargs.c import-noargs.def
+	llvm-dlltool -m i386:x86-64 -d import-noargs.def -l libimport-noargs-api.a
+	clang --target=x86_64-w64-windows-gnu -O1 -fno-builtin -fno-optimize-sibling-calls -nostdlib -Wl,-e,noargs_main -o import-noargs.exe import-noargs.c -L. -limport-noargs-api -lkernel32
+	rm -f libimport-noargs-api.a
+
 # An ELF object file for x86-64. Each call of an import has a reloc.
 import-reloc.o: import-reloc.c
 	clang --target=x86_64-unknown-linux-gnu -O1 -fno-builtin -fno-optimize-sibling-calls -fno-pic -c -o import-reloc.o import-reloc.c
