@@ -249,6 +249,47 @@ static bool isWrittenBeforeRead(RzAnalysisVar *var)
  * \param sz Size in bytes of the candidate argument
  * \return Matching trial index, or `-1` if no trial overlaps \p addr
  */
+// True if the address is the slot of an import (GOT, IAT) or the target of an import relocation.
+static bool isImportAddress(RzCore *core, ut64 addr)
+{
+	RzBinReloc *reloc = rz_core_getreloc(core, addr, 1);
+	if(!reloc)
+		reloc = rz_core_get_reloc_to(core, addr);
+	if(reloc && reloc->import)
+		return true;
+	// PE imports are not relocations. Their slots have a flag in the imports flagspace.
+	const RzList *flags = rz_flag_get_list(core->flags, addr);
+	if(!flags)
+		return false;
+	RzListIter *iter;
+	void *pos;
+	rz_list_foreach(flags, iter, pos)
+	{
+		auto flag = reinterpret_cast<RzFlagItem *>(pos);
+		if(flag->space && flag->space->name && !strcmp(flag->space->name, RZ_FLAGS_FS_IMPORTS))
+			return true;
+	}
+	return false;
+}
+
+// A function with one block that jumps to an import.
+// The decompiler cannot see the body of the import, so it cannot find the args there.
+static bool isImportThunk(RzCore *core, RzAnalysisFunction *fcn)
+{
+	if(!fcn->bbs || rz_pvector_len(fcn->bbs) != 1)
+		return false;
+	bool found = false;
+	RzList *xrefs = rz_analysis_function_get_xrefs_from(fcn);
+	if(!xrefs)
+		return false;
+	rz_list_foreach_cpp<RzAnalysisXRef>(xrefs, [&](RzAnalysisXRef *xref) {
+		if(!found && xref->type == RZ_ANALYSIS_XREF_TYPE_CODE)
+			found = isImportAddress(core, xref->to);
+	});
+	rz_list_free(xrefs);
+	return found;
+}
+
 static int4 findParamTrialIndex(ParamActive &params, const Address &addr, int4 sz)
 {
 	int4 idx = params.whichTrial(addr, sz);
@@ -650,6 +691,117 @@ FunctionSymbol *RizinScope::registerFunction(RzAnalysisFunction *fcn) const
 			childRegRange(rangelist);
 	}
 
+	bool argsFromTypeDb = false;
+	if(proto && argsByIndex.empty() && isImportThunk(core, fcn))
+	{
+		RzTypeDB *typeDb = rz_analysis_get_type_db(core->analysis);
+		char *shortName = rz_analysis_function_name_guess(typeDb, fcn->name);
+		const RzCallable *signature = rz_type_func_get(typeDb, shortName ? shortName : fcn->name);
+		rz_mem_free(shortName);
+		const bool hasSignature = signature && !rz_pvector_empty(signature->args);
+		PrototypePieces pieces;
+		pieces.model = proto;
+		pieces.name = fcn_name;
+		pieces.outtype = hasSignature && signature->ret ? arch->getTypeFactory()->fromRzType(signature->ret, nullptr) : nullptr;
+		pieces.firstVarArgSlot = -1;
+		bool usable = hasSignature && pieces.outtype;
+		if(usable)
+		{
+			usable = rz_pvector_foreach_cpp<RzCallableArg>(signature->args, [&](RzCallableArg *arg) {
+				if(!arg || !arg->type)
+					return false;
+				// The type database writes the variable part of some functions as a last
+				// fixed arg, for example "void *va_args" in fprintf and "va_list args" in sprintf.
+				// A call site supplies it or not, so the decompiler must find it there.
+				const bool isLast = arg == rz_pvector_tail(signature->args);
+				const bool isVaList = arg->type->kind == RZ_TYPE_KIND_IDENTIFIER && arg->type->identifier.name && !strcmp(arg->type->identifier.name, "va_list");
+				if(isLast && (isVaList || (arg->name && !strcmp(arg->name, "va_args"))))
+					return true;
+				std::string typeError;
+				Datatype *type = arch->getTypeFactory()->fromRzType(arg->type, &typeError);
+				if(!type)
+				{
+					char *tstr = rz_type_as_string(typeDb, arg->type);
+					arch->addWarning("Failed to match type " + to_string(tstr ? tstr : "?") + " for arg " + to_string(arg->name) + " of " + to_string(fcn_name) + " to Decompiler type: " + typeError);
+					rz_mem_free(tstr);
+					type = arch->types->getBase(rz_asm_get_bits(core->rasm) / 8, TYPE_UNKNOWN);
+				}
+				if(!type || type->getSize() < 1)
+					return false;
+				pieces.intypes.push_back(type);
+				pieces.innames.push_back(arg->name && *arg->name ? arg->name : "param_" + to_string(pieces.innames.size()));
+				return true;
+			});
+		}
+		if(pieces.intypes.empty())
+			usable = false;
+		// Same procedure as FuncProto::updateAllTypes: the model gets the return type too,
+		// and each piece that it gives back becomes an input symbol with its flags.
+		std::vector<ParameterPieces> storage;
+		if(usable)
+		{
+			try
+			{
+				proto->assignParameterStorage(pieces, storage, true);
+			}
+			catch(const ParamUnassignedError &)
+			{
+				usable = false;
+			}
+		}
+		size_t namedPieces = 0;
+		for(size_t i = 1; usable && i < storage.size(); i++)
+		{
+			const ParameterPieces &piece = storage[i];
+			if(piece.addr.isInvalid() || !piece.type)
+			{
+				usable = false;
+				break;
+			}
+			if(!(piece.flags & ParameterPieces::hiddenretparm))
+				namedPieces++;
+			uintb last = piece.addr.getOffset() + piece.type->getSize() - 1;
+			for(const auto &range : varRanges)
+			{
+				if(range.getSpace() != piece.addr.getSpace() || range.getFirst() > last || range.getLast() < piece.addr.getOffset())
+					continue;
+				usable = false;
+				break;
+			}
+		}
+		if(usable && namedPieces != pieces.intypes.size())
+			usable = false;
+		if(hasSignature && !pieces.intypes.empty() && !usable)
+			arch->addWarning("Failed to apply the type database signature of " + to_string(fcn_name) + ", args may be inaccurate.");
+		size_t nameIndex = 0;
+		for(size_t i = 1; usable && i < storage.size(); i++)
+		{
+			const ParameterPieces &piece = storage[i];
+			const bool isHiddenReturn = (piece.flags & ParameterPieces::hiddenretparm) != 0;
+			auto mapsymElement = child(symbollistElement, "mapsym");
+			auto symbolElement = child(mapsymElement, "symbol", {
+					{ "name", isHiddenReturn ? "rethidden" : pieces.innames[nameIndex++] },
+					{ "typelock", "true" },
+					{ "namelock", "true" },
+					{ "readonly", "false" },
+					{ "cat", "0" },
+					{ "index", to_string(i - 1) }
+			});
+			if(isHiddenReturn)
+				symbolElement->addAttribute("hiddenretparm", "true");
+			if(piece.flags & ParameterPieces::indirectstorage)
+				symbolElement->addAttribute("indirectstorage", "true");
+
+			childType(symbolElement, piece.type);
+			childAddr(mapsymElement, "addr", piece.addr);
+
+			auto rangelist = child(mapsymElement, "rangelist");
+			if(piece.addr.getSpace() != arch->translate->getStackSpace())
+				childRegRange(rangelist);
+		}
+		argsFromTypeDb = usable;
+	}
+
 	int4 extraPop = proto ? proto->getExtraPop() : arch->translate->getDefaultSize();
 	if(extraPop == ProtoModel::extrapop_unknown)
 		extraPop = arch->translate->getDefaultSize();
@@ -662,6 +814,8 @@ FunctionSymbol *RizinScope::registerFunction(RzAnalysisFunction *fcn) const
 			{ "model", proto ? proto->getName() : "unknown" },
 			{ "noreturn", isNoReturn ? "true" : "false" }
 	});
+	if(argsFromTypeDb)
+		prototypeElement->addAttribute("dotdotdot", "true");
 
 	Address returnAddr(arch->getSpaceByName("register"), 0);
 	bool returnFound = false;

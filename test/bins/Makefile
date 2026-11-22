@@ -25,3 +25,9 @@ strings: strings.c
 
 sharedReturn.o: sharedReturn.c
 	gcc -m64 -fno-pic -no-pie -fno-omit-frame-pointer -fno-inline -o sharedReturn.o -O2 -c sharedReturn.c
+
+# A PE for x86-64 from a MinGW clang toolchain. Each import gets a "jmp [IAT]" thunk.
+import-args.exe: import-args.c import-args.h import-args.def
+	llvm-dlltool -m i386:x86-64 -d import-args.def -l libimport-args-api.a
+	clang --target=x86_64-w64-windows-gnu -O1 -fno-builtin -fno-optimize-sibling-calls -nostdlib -Wl,-e,probe_main -o import-args.exe import-args.c -L. -limport-args-api -lmsvcrt-os
+	rm -f libimport-args-api.a
