@@ -4392,7 +4392,7 @@ void dbg.set_padded(padded *item, unsigned int quantity)
 {
     // [00] -r-x section size 4096 named .text
     item->name[0] = '\0';
-    *(unsigned int *)((int64_t)&item->quantity + 1) = quantity;
+    *(unsigned int *)((int64_t)&item->quantity + 2) = quantity;
     return;
 }
 
