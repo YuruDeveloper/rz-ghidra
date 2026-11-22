@@ -3488,6 +3488,30 @@ int32_t sym.reloc_exit(int64_t arg1)
 EOF
 RUN
 
+NAME=import slot call (review 1006, no change for an indexed call or a slot that the function writes)
+FILE=bins/import-direct32.exe
+CMDS=<<EOF
+aaa
+pdg @ sym._direct_indexed
+pdg @ sym._direct_overwrite
+EOF
+EXPECT=<<EOF
+
+void __cdecl sym._direct_indexed(int32_t arg_4h)
+{
+    (**(code **)(sym.imp.import_direct32_api.dll_fread + arg_4h * 4))(0x17);
+    return;
+}
+
+void __cdecl sym._direct_overwrite(int32_t arg_4h)
+{
+    _sym.imp.import_direct32_api.dll_fread = arg_4h;
+    (*(code *)arg_4h)(0x17);
+    return;
+}
+EOF
+RUN
+
 NAME=readonlypropagate (objc)
 FILE=rizin-testbins/mach0/hello-macos-arm64
 CMDS=<<EOF

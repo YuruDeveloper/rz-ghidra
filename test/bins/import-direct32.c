@@ -18,6 +18,29 @@ __attribute__((noinline)) int direct_mixed(void *stream) {
 	return (int)count + 1;
 }
 
+// A compiler does not make the calls of these two functions, thus they are in assembly.
+// direct_indexed calls an entry of a table that starts at the import slot of fread.
+// direct_overwrite writes its arg to the import slot of fread and then calls the slot.
+// These calls are not calls of fread.
+__attribute__((naked)) void direct_indexed(int index) {
+	__asm__(
+		"movl 4(%esp), %eax\n"
+		"pushl $23\n"
+		"calll *__imp__fread(,%eax,4)\n"
+		"addl $4, %esp\n"
+		"retl\n");
+}
+
+__attribute__((naked)) void direct_overwrite(void *function) {
+	__asm__(
+		"movl 4(%esp), %eax\n"
+		"movl %eax, __imp__fread\n"
+		"pushl $23\n"
+		"calll *__imp__fread\n"
+		"addl $4, %esp\n"
+		"retl\n");
+}
+
 int direct_main(void) {
 	return direct_mixed(0);
 }
