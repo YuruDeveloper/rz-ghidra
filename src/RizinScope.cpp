@@ -1089,7 +1089,6 @@ Symbol *RizinScope::registerFlag(RzFlagItem *flag) const
 		if(!sz)
 			sz = 1; // The decompiler will figure out the length to display
 		type = arch->types->getTypeArray(sz, ptype);
-		attr |= Varnode::readonly;
 	}
 
 	// TODO: more types
