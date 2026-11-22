@@ -4452,3 +4452,182 @@ MIPS:BE:32:default:gcc
 EOF
 RUN
 
+NAME=structure from DWARF with padding (member offsets from Rizin)
+FILE=bins/struct-offset.exe
+CMDS=<<EOF
+aaa
+pdg @ dbg.set_padded
+pdg @ dbg.set_tagged
+EOF
+EXPECT=<<EOF
+
+void dbg.set_padded(padded *item, unsigned int quantity)
+{
+    // [00] -r-x section size 4096 named .text
+    item->name[0] = '\0';
+    item->quantity = quantity;
+    return;
+}
+
+// WARNING: [rz-ghidra] Failed to match type union value of member value in struct tagged
+
+void dbg.set_tagged(tagged *item, unsigned int quantity)
+{
+    item->kind = '\x01';
+    item->quantity = quantity;
+    return;
+}
+EOF
+RUN
+
+NAME=structure from DWARF with bit-fields at the same offset (packed layout)
+FILE=bins/struct-offset.exe
+CMDS=<<EOF
+aaa
+pdg @ dbg.set_flags
+EOF
+EXPECT=<<EOF
+
+void dbg.set_flags(flags *item, unsigned int quantity)
+{
+    *(undefined *)&item->high = 0;
+    *(unsigned int *)(item->name + 0x18) = quantity;
+    return;
+}
+EOF
+RUN
+
+NAME=structure from a C declaration in the place of a DWARF structure (packed layout)
+FILE=bins/struct-offset.exe
+CMDS=<<EOF
+aaa
+t- padded
+td "struct padded { char name[30]; unsigned int quantity; };"
+pdg @ dbg.set_padded
+EOF
+EXPECT=<<EOF
+
+void dbg.set_padded(padded *item, unsigned int quantity)
+{
+    // [00] -r-x section size 4096 named .text
+    item->name[0] = '\0';
+    *(unsigned int *)((int64_t)&item->quantity + 2) = quantity;
+    return;
+}
+EOF
+RUN
+
+NAME=structure from DWARF 2 with member offsets that Rizin does not decode (packed layout)
+FILE=bins/struct-offset-dwarf2.exe
+CMDS=<<EOF
+aaa
+pdg @ dbg.set_padded
+pdg @ dbg.set_tagged
+EOF
+EXPECT=<<EOF
+
+void dbg.set_padded(padded *item, unsigned int quantity)
+{
+    // [00] -r-x section size 4096 named .text
+    item->name[0] = '\0';
+    *(unsigned int *)((int64_t)&item->quantity + 2) = quantity;
+    return;
+}
+
+// WARNING: [rz-ghidra] Failed to match type union value of member value in struct tagged
+
+void dbg.set_tagged(tagged *item, unsigned int quantity)
+{
+    item->kind = '\x01';
+    *(unsigned int *)((int64_t)&item[2].quantity + 1) = quantity;
+    return;
+}
+EOF
+RUN
+
+NAME=structure from a C declaration with DWARF structures as a member (members do not overlap)
+FILE=bins/struct-offset.exe
+CMDS=<<EOF
+aaa
+t- exact
+td "struct exact { struct tagged head[2]; unsigned int quantity; };"
+pdg @ dbg.set_exact
+EOF
+EXPECT=<<EOF
+
+// WARNING: [rz-ghidra] Failed to match type union value of member value in struct tagged
+
+void dbg.set_exact(exact *item, unsigned int quantity)
+{
+    item->head[0].kind = '\0';
+    item->quantity = quantity;
+    return;
+}
+EOF
+RUN
+
+NAME=structure from DWARF with a member after an array of structures (review 1201, member offsets from Rizin)
+FILE=bins/struct-table.exe
+CMDS=<<EOF
+aaa
+pdg @ dbg.SetTail
+EOF
+EXPECT=<<EOF
+
+void dbg.SetTail(Table *table, unsigned int value)
+{
+    // [00] -r-x section size 4096 named .text
+    table->Tail = value;
+    return;
+}
+EOF
+RUN
+
+NAME=structure from DWARF with a member after an array with two dimensions (review 1217, member offsets from Rizin)
+FILE=bins/struct-matrix.exe
+CMDS=<<EOF
+aaa
+pdg @ dbg.WriteGrid
+pdg @ dbg.SetTrailer
+EOF
+EXPECT=<<EOF
+
+void dbg.WriteGrid(MatrixRecord *record, unsigned char value)
+{
+    // [00] -r-x section size 4096 named .text
+    record->Grid[0][1] = value;
+    return;
+}
+
+void dbg.SetTrailer(MatrixRecord *record, unsigned char value)
+{
+    record->Tail = value;
+    return;
+}
+EOF
+RUN
+
+NAME=structure from DWARF 2 with a member after an array with two dimensions (review 1217, packed layout)
+FILE=bins/struct-matrix-dwarf2.exe
+CMDS=<<EOF
+aaa
+pdg @ dbg.WriteGrid
+pdg @ dbg.SetTrailer
+EOF
+EXPECT=<<EOF
+
+void dbg.WriteGrid(MatrixRecord *record, unsigned char value)
+{
+    // [00] -r-x section size 4096 named .text
+    record->Grid[0][1] = value;
+    return;
+}
+
+void dbg.SetTrailer(MatrixRecord *record, unsigned char value)
+{
+    record->Tail = value;
+    return;
+}
+EOF
+RUN
+
