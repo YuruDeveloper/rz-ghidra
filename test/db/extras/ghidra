@@ -1442,7 +1442,7 @@ void sym.Aeropause(Bright *bright, int32_t argc, char **argv)
         bright->ambassador = AMBASSADOR_PURE;
     } else {
         (bright->window).sunlight = bright->morning->saved_argv[1];
-        iVar3 = sym.imp.strcmp((bright->window).sunlight, (char *)data.0804a05c);
+        iVar3 = sym.imp.strcmp((bright->window).sunlight, "the  ");
         if (iVar3 == 0) {
             bright->ambassador = AMBASSADOR_REASON;
         } else {
@@ -3507,7 +3507,7 @@ EXPECT=<<EOF
 
 void __cdecl sym._direct_indexed(int32_t arg_4h)
 {
-    (**(code **)(sym.imp.import_direct32_api.dll_fread + arg_4h * 4))(0x17);
+    (**(code **)(&sym.imp.import_direct32_api.dll_fread + arg_4h * 4))(0x17);
     return;
 }
 
@@ -3753,7 +3753,7 @@ int64_t dbg.main(void)
     arg1._0_4_ = (*fcns[1])(&a);
     uVar1 = (undefined4)arg1;
     section.1.__TEXT.__stubs("");
-    arg1 = fcn.100003d84(sym.class_Test);
+    arg1 = fcn.100003d84(&sym.class_Test);
     fcn.100003da8(arg1, "methodWithoutArgs");
     fcn.100003da8(arg1, "methodWithOneArg:", 0x7b);
     fcn.100003da8(arg1, "methodWithTwoArgs:secondArg:", 0x539, uVar1);
@@ -3868,6 +3868,137 @@ undefined8 main(int argc)
 EOF
 RUN
 
+# Rizin gives the flag data.<address> to the strings "rb" and "a". The flag has no type, thus the
+# decompiler shows each string. The writable data and the arrays of numbers keep the name of their flag.
+# The last two records have the bytes 41 00 42 00 and 41 00 43 00. The decompiler shows each
+# record as the string "A". Ghidra gives the same output. This output is an accepted cost (review 1157).
+NAME=pointer flag without a type (short strings, no string for writable data and for arrays of numbers, review 1157)
+FILE=bins/pointer-string.exe
+CMDS=<<EOF
+aaa
+pdg @ sym.pointer_open_long
+pdg @ sym.pointer_open
+pdg @ sym.pointer_open_one
+pdg @ sym.pointer_open_writable
+pdg @ sym.pointer_numbers
+pdg @ sym.pointer_string_bytes
+pdg @ sym.pointer_write_records
+EOF
+EXPECT=<<EOF
+
+void sym.pointer_open_long(char *filename)
+{
+    // [00] -r-x section size 4096 named .text
+    sym.fopen(filename, "r+b,ccs=UTF-8");
+    return;
+}
+
+void sym.pointer_open(char *filename)
+{
+    sym.fopen(filename, "rb");
+    return;
+}
+
+void sym.pointer_open_one(char *filename)
+{
+    sym.fopen(filename, "a");
+    return;
+}
+
+void sym.pointer_open_writable(char *filename)
+{
+    sym.fopen(filename, &data.140004004);
+    return;
+}
+
+undefined4 sym.pointer_numbers(int64_t arg1)
+{
+    return *(undefined4 *)(&data.140002020 + (uint64_t)((uint32_t)arg1 & 3) * 4);
+}
+
+undefined2 sym.pointer_string_bytes(int64_t arg1)
+{
+    return *(undefined2 *)(&data.140002030 + (uint64_t)((uint32_t)arg1 & 3) * 2);
+}
+
+int32_t sym.pointer_write_records(int64_t arg1)
+{
+    ssize_t sVar1;
+    ssize_t sVar2;
+    
+    sVar1 = sym.write((int)arg1, "A", 4);
+    sVar2 = sym.write((int)arg1, "A", 4);
+    return (int32_t)sVar2 + (int32_t)sVar1;
+}
+EOF
+RUN
+
+# A flag at an address of code has no type when Rizin has no function there. The decompiler shows
+# the address of such a flag with the operator "&". A function keeps its name without the operator.
+NAME=flag at code without a type (a symbol that is not a function, a label in a function, no change for functions)
+FILE=bins/callback-flag.exe
+CMDS=<<EOF
+af @ sym.callback_register
+pdg @ sym.callback_register
+aaa
+pdg @ sym.callback_register
+pdg @ sym.callback_dispatch
+pdg @ sym.callback_direct
+pdg @ sym.callback_label
+EOF
+EXPECT=<<EOF
+
+void sym.callback_register(void)
+{
+    // [00] -r-x section size 4096 named .text
+    sym.signal(2, &sym.callback_handler);
+    return;
+}
+
+void sym.callback_register(void)
+{
+    // [00] -r-x section size 4096 named .text
+    sym.signal(2, sym.callback_handler);
+    return;
+}
+
+void sym.callback_dispatch(int64_t arg1, int64_t arg2)
+{
+    (**(code **)((uint64_t)((uint32_t)arg1 & 1) * 8 + 0x140002000))(arg2 & 0xffffffff);
+    return;
+}
+
+int32_t sym.callback_direct(int64_t arg1)
+{
+    int32_t iVar1;
+    int32_t iVar2;
+    
+    iVar1 = sym.callback_first(arg1);
+    iVar2 = sym.callback_second(arg1 & 0xffffffff);
+    return iVar2 + iVar1;
+}
+
+undefined * sym.callback_label(int64_t arg1)
+{
+    char *s;
+    undefined *puVar1;
+    bool bVar2;
+    
+    bVar2 = (int32_t)arg1 != 0;
+    puVar1 = &data.140001095;
+    if (bVar2) {
+        puVar1 = (undefined *)0x0;
+    }
+    s = "second";
+    if (!bVar2) {
+        s = "first";
+    }
+    sym.puts(s);
+    return puVar1;
+}
+EOF
+RUN
+
 NAME=reloc target functions
 FILE=rizin-testbins/elf/linux-example-x86-32.ko
 CMDS=<<EOF
@@ -3941,13 +4072,13 @@ undefined8 main(void)
     
     uVar2 = objc_autoreleasePoolPush();
     uVar1 = (**(code **)0x100008158)(0x100008148);
-    NSLog(__CFConstantStringClassReference);
+    NSLog(&__CFConstantStringClassReference);
     uVar3 = objc_alloc_init(0x100008120);
     objc_msgSend$methodWithoutArgs(uVar3, var_48h);
     objc_msgSend$methodWithOneArg:(uVar3, var_48h, 0x7b);
     objc_msgSend$methodWithTwoArgs:secondArg:(uVar3, var_48h, 0x539, uVar1);
     objc_msgSend$methodWithReturn(uVar3, var_48h);
-    NSLog(__CFConstantStringClassReference);
+    NSLog(&__CFConstantStringClassReference);
     objc_autoreleasePoolPop(uVar2);
     return 0;
 }
@@ -3967,13 +4098,13 @@ undefined8 main(void)
     
     uVar2 = sym.imp.objc_autoreleasePoolPush();
     uVar1 = (**(code **)0x100008158)(0x100008148);
-    sym.imp.NSLog(reloc.__CFConstantStringClassReference.1000040a8);
+    sym.imp.NSLog(&reloc.__CFConstantStringClassReference.1000040a8);
     uVar3 = sym.imp.objc_alloc_init(0x100008120);
     stub.objc_msgSend_methodWithoutArgs(uVar3, var_48h);
     stub.objc_msgSend_methodWithOneArg:(uVar3, var_48h, 0x7b);
     stub.objc_msgSend_methodWithTwoArgs:secondArg:(uVar3, var_48h, 0x539, uVar1);
     stub.objc_msgSend_methodWithReturn(uVar3, var_48h);
-    sym.imp.NSLog(reloc.__CFConstantStringClassReference.1000040c8);
+    sym.imp.NSLog(&reloc.__CFConstantStringClassReference.1000040c8);
     sym.imp.objc_autoreleasePoolPop(uVar2);
     return 0;
 }

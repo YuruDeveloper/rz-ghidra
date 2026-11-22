@@ -1096,7 +1096,7 @@ Symbol *RizinScope::registerFlag(RzFlagItem *flag) const
 
 	if(!type)
 	{
-		type = arch->types->getTypeCode();
+		type = arch->types->getBase(1, TYPE_UNKNOWN);
 	}
 
 	// Check whether flags should be displayed by their real name

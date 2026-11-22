@@ -65,3 +65,11 @@ import-return32-slot.exe: import-return32.c import-return32.def
 # An ELF object file for x86-64. Each call of an import has a reloc.
 import-reloc.o: import-reloc.c
 	clang --target=x86_64-unknown-linux-gnu -O1 -fno-builtin -fno-optimize-sibling-calls -fno-pic -c -o import-reloc.o import-reloc.c
+
+# A PE for x86-64 with pointers to short strings and to other data.
+pointer-string.exe: pointer-string.c
+	clang --target=x86_64-w64-windows-gnu -O1 -fno-builtin -fno-optimize-sibling-calls -nostdlib -Wl,-e,pointer_main -o pointer-string.exe pointer-string.c -lmsvcrt-os
+
+# A PE for x86-64 with pointers to functions and to a label in a function.
+callback-flag.exe: callback-flag.c
+	clang --target=x86_64-w64-windows-gnu -O1 -fno-builtin -fno-optimize-sibling-calls -nostdlib -Wl,-e,callback_main -o callback-flag.exe callback-flag.c -lmsvcrt-os
