@@ -3568,6 +3568,148 @@ void sym.api_unknown(void)
 EOF
 RUN
 
+NAME=import thunk return type (review 1010, 32-bit PE, integer pair, float, structure and void)
+FILE=bins/import-return32.exe
+CMDS=<<EOF
+aaa
+to bins/import-return32.h
+pdg @ sym._return_wide
+pdg @ sym._return_double
+pdg @ sym._return_float
+pdg @ sym._return_record
+pdg @ sym._return_void
+pdg @ sym._api_wide
+pdg @ sym._api_double
+EOF
+EXPECT=<<EOF
+
+int64_t __cdecl sym._return_wide(int32_t arg_4h)
+{
+    unsigned long long uVar1;
+    
+    // [00] -r-x section size 4096 named .text
+    uVar1 = sym._api_wide(arg_4h);
+    return uVar1 + 0x100000002;
+}
+
+unkfloat10 __cdecl sym._return_double(int32_t arg_4h)
+{
+    unkfloat10 Var1;
+    int32_t var_ch;
+    
+    Var1 = (unkfloat10)sym._api_double(arg_4h);
+    return (unkfloat10)((double)Var1 + (double)Var1);
+}
+
+unkfloat10 __cdecl sym._return_float(int32_t arg_4h)
+{
+    unkfloat10 Var1;
+    int32_t var_4h;
+    
+    Var1 = (unkfloat10)sym._api_float(arg_4h);
+    return (unkfloat10)((float)Var1 + (float)Var1);
+}
+
+undefined8 __cdecl sym._return_record(int32_t arg_4h)
+{
+    undefined auStack_20 [8];
+    int32_t var_18h;
+    uint32_t uStack_10;
+    int32_t var_ch;
+    int32_t var_8h;
+    
+    sym._api_record((wide_record *)auStack_20, arg_4h);
+    return CONCAT44(var_ch + auStack_20._4_4_ + (uint32_t)CARRY4(uStack_10, auStack_20._0_4_), 
+                    uStack_10 + auStack_20._0_4_);
+}
+
+int32_t __cdecl sym._return_void(int32_t arg_4h)
+{
+    sym._api_void(arg_4h);
+    return arg_4h + 7;
+}
+
+unsigned long long __cdecl sym._api_wide(int marker, ...)
+{
+    unsigned long long uVar1;
+    
+    // WARNING: Could not recover jumptable at 0x004010eb. Too many branches
+    // WARNING: Treating indirect jump as call
+    uVar1 = sym.imp.import_return32_api.dll_api_wide(marker);
+    return uVar1;
+}
+
+void __cdecl sym._api_double(int marker, ...)
+{
+    // WARNING: Could not recover jumptable at 0x004010d3. Too many branches
+    // WARNING: Treating indirect jump as call
+    sym.imp.import_return32_api.dll_api_double(marker);
+    return;
+}
+EOF
+RUN
+
+NAME=import slot return type (review 1010, 32-bit PE, integer pair, float, structure and void)
+FILE=bins/import-return32-slot.exe
+CMDS=<<EOF
+aaa
+to bins/import-return32.h
+pdg @ sym._return_wide
+pdg @ sym._return_double
+pdg @ sym._return_float
+pdg @ sym._return_record
+pdg @ sym._return_void
+EOF
+EXPECT=<<EOF
+
+int64_t __cdecl sym._return_wide(int32_t arg_4h)
+{
+    unsigned long long uVar1;
+    
+    // [00] -r-x section size 4096 named .text
+    uVar1 = sym.imp.import_return32_api.dll_api_wide(arg_4h);
+    return uVar1 + 0x100000002;
+}
+
+unkfloat10 __cdecl sym._return_double(int32_t arg_4h)
+{
+    unkfloat10 Var1;
+    int32_t var_ch;
+    
+    Var1 = (unkfloat10)sym.imp.import_return32_api.dll_api_double(arg_4h);
+    return (unkfloat10)((double)Var1 + (double)Var1);
+}
+
+unkfloat10 __cdecl sym._return_float(int32_t arg_4h)
+{
+    unkfloat10 Var1;
+    int32_t var_4h;
+    
+    Var1 = (unkfloat10)sym.imp.import_return32_api.dll_api_float(arg_4h);
+    return (unkfloat10)((float)Var1 + (float)Var1);
+}
+
+undefined8 __cdecl sym._return_record(int32_t arg_4h)
+{
+    undefined auStack_20 [8];
+    int32_t var_18h;
+    uint32_t uStack_10;
+    int32_t var_ch;
+    int32_t var_8h;
+    
+    sym.imp.import_return32_api.dll_api_record((wide_record *)auStack_20, arg_4h);
+    return CONCAT44(var_ch + auStack_20._4_4_ + (uint32_t)CARRY4(uStack_10, auStack_20._0_4_), 
+                    uStack_10 + auStack_20._0_4_);
+}
+
+int32_t __cdecl sym._return_void(int32_t arg_4h)
+{
+    sym.imp.import_return32_api.dll_api_void(arg_4h);
+    return arg_4h + 7;
+}
+EOF
+RUN
+
 NAME=readonlypropagate (objc)
 FILE=rizin-testbins/mach0/hello-macos-arm64
 CMDS=<<EOF

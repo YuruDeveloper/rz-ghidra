@@ -1,0 +1,7 @@
+LIBRARY import-return32-api.dll
+EXPORTS
+api_wide
+api_double
+api_float
+api_record
+api_void
