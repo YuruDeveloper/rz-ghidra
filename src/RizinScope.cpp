@@ -318,10 +318,27 @@ static Element *child(Element *el, const std::string &name, const std::map<std::
 
 static Element *childAddr(Element *el, const std::string &name, const Address &addr)
 {
-	return child(el, name, {
-		{ "space", addr.getSpace()->getName() },
-		{ "offset", hex(addr.getOffset()) }
+	AddrSpace *space = addr.getSpace();
+	if(space->getType() != IPTR_JOIN)
+		return child(el, name, {
+			{ "space", space->getName() },
+			{ "offset", hex(addr.getOffset()) }
+		});
+	// The decoder makes a join address from its pieces. The format is the same as in JoinSpace::encodeAttributes.
+	JoinRecord *record = space->getManager()->findJoin(addr.getOffset());
+	auto element = child(el, name, {
+		{ "space", space->getName() }
 	});
+	for(int4 i = 0; i < record->numPieces(); i++)
+	{
+		const VarnodeData &piece = record->getPiece(i);
+		std::ostringstream text;
+		text << piece.space->getName() << ":0x" << std::hex << piece.offset << ':' << std::dec << piece.size;
+		element->addAttribute("piece" + std::to_string(i + 1), text.str());
+	}
+	if(record->numPieces() == 1)
+		element->addAttribute("logicalsize", std::to_string(record->getUnified().size));
+	return element;
 }
 
 static Element *childType(Element *el, Datatype *type)
@@ -377,14 +394,18 @@ static const RzCallable *typeDbSignature(RzCore *core, const char *name)
 	return signature;
 }
 
-// Gets the args of a type database signature with the storage that the prototype model gives them.
+// Gets the return value and the args of a type database signature with the storage that the prototype model gives them.
 // storage[0] is for the return value. names[i - 1] is the name of the arg in storage[i].
-// Returns false and leaves both lists empty if there is no signature with args or it cannot be used.
-static bool typeDbArgs(RizinArchitecture *arch, RzCore *core, const RzCallable *signature, ProtoModel *proto, const std::string &functionName, std::vector<std::string> &names, std::vector<ParameterPieces> &storage)
+// A signature without args gives no storage for args. The callers do not lock the args then,
+// because the database does not tell if the function has no args.
+// returnUsable tells if the callers can lock the return value in storage[0].
+// Returns false and leaves both lists empty if there is no signature or it cannot be used.
+static bool typeDbSignatureStorage(RizinArchitecture *arch, RzCore *core, const RzCallable *signature, ProtoModel *proto, const std::string &functionName, std::vector<std::string> &names, std::vector<ParameterPieces> &storage, bool &returnUsable)
 {
 	names.clear();
 	storage.clear();
-	if(!signature || rz_pvector_empty(signature->args) || !signature->ret)
+	returnUsable = false;
+	if(!signature || !signature->ret)
 		return false;
 	RzTypeDB *typeDb = rz_analysis_get_type_db(core->analysis);
 	PrototypePieces pieces;
@@ -421,20 +442,44 @@ static bool typeDbArgs(RizinArchitecture *arch, RzCore *core, const RzCallable *
 		pieces.innames.push_back(arg->name && *arg->name ? arg->name : "param_" + to_string(pieces.innames.size()));
 		return true;
 	});
-	if(pieces.intypes.empty())
+	if(pieces.intypes.empty() && !rz_pvector_empty(signature->args))
 		return false;
 	// Same procedure as FuncProto::updateAllTypes: the model gets the return type too,
-	// and each piece that it gives back is an input with its flags.
+	// and each piece that it gives back is the output or an input with its flags.
 	if(usable)
 	{
 		try
 		{
-			proto->assignParameterStorage(pieces, storage, true);
+			proto->assignParameterStorage(pieces, storage, false);
 		}
 		catch(const ParamUnassignedError &)
 		{
 			usable = false;
 		}
+	}
+	// A pentry with extension="float" gives no address here, because the register space is from the
+	// Sleigh translator and that translator has no join space. Then the model puts a floating-point
+	// value in the storage of an integer, for example a double in EDX:EAX and not in ST0 on 32-bit x86.
+	// A floating-point return value with the storage of an integer of the same size is not reliable.
+	returnUsable = usable;
+	if(usable && pieces.outtype->getMetatype() == TYPE_FLOAT)
+	{
+		PrototypePieces integerPieces;
+		integerPieces.model = proto;
+		integerPieces.name = functionName;
+		integerPieces.outtype = arch->types->getBase(pieces.outtype->getSize(), TYPE_UNKNOWN);
+		integerPieces.firstVarArgSlot = -1;
+		std::vector<ParameterPieces> integerStorage;
+		try
+		{
+			proto->assignParameterStorage(integerPieces, integerStorage, false);
+		}
+		catch(const ParamUnassignedError &)
+		{
+			integerStorage.clear();
+		}
+		if(!integerStorage.empty() && integerStorage[0].addr == storage[0].addr)
+			returnUsable = false;
 	}
 	size_t nameIndex = 0;
 	for(size_t i = 1; usable && i < storage.size(); i++)
@@ -456,6 +501,7 @@ static bool typeDbArgs(RizinArchitecture *arch, RzCore *core, const RzCallable *
 		warnSignature(arch, functionName);
 		names.clear();
 		storage.clear();
+		returnUsable = false;
 	}
 	return usable;
 }
@@ -791,11 +837,12 @@ FunctionSymbol *RizinScope::registerFunction(RzAnalysisFunction *fcn) const
 	}
 
 	bool argsFromTypeDb = false;
+	bool returnFromTypeDb = false;
+	std::vector<ParameterPieces> storage;
 	if(proto && argsByIndex.empty() && isImportThunk(core, fcn))
 	{
 		std::vector<std::string> names;
-		std::vector<ParameterPieces> storage;
-		bool usable = typeDbArgs(arch, core, typeDbSignature(core, fcn->name), proto, to_string(fcn_name), names, storage);
+		bool usable = typeDbSignatureStorage(arch, core, typeDbSignature(core, fcn->name), proto, to_string(fcn_name), names, storage, returnFromTypeDb);
 		for(size_t i = 1; usable && i < storage.size(); i++)
 		{
 			const ParameterPieces &piece = storage[i];
@@ -809,7 +856,11 @@ FunctionSymbol *RizinScope::registerFunction(RzAnalysisFunction *fcn) const
 			}
 		}
 		if(!usable && !storage.empty())
+		{
 			warnSignature(arch, to_string(fcn_name));
+			storage.clear();
+			returnFromTypeDb = false;
+		}
 		for(size_t i = 1; usable && i < storage.size(); i++)
 		{
 			const ParameterPieces &piece = storage[i];
@@ -834,7 +885,7 @@ FunctionSymbol *RizinScope::registerFunction(RzAnalysisFunction *fcn) const
 			if(piece.addr.getSpace() != arch->translate->getStackSpace())
 				childRegRange(rangelist);
 		}
-		argsFromTypeDb = usable;
+		argsFromTypeDb = usable && storage.size() > 1;
 	}
 
 	int4 extraPop = proto ? proto->getExtraPop() : arch->translate->getDefaultSize();
@@ -871,11 +922,20 @@ FunctionSymbol *RizinScope::registerFunction(RzAnalysisFunction *fcn) const
 	// TODO: should we try to get the return address from rizin's cc?
 
 	auto returnsymElement = child(prototypeElement, "returnsym");
-	childAddr(returnsymElement, "addr", returnAddr);
-
-	child(returnsymElement, "typeref", {
-			{ "name", "undefined" }
-	});
+	if(!returnFromTypeDb)
+	{
+		childAddr(returnsymElement, "addr", returnAddr);
+		child(returnsymElement, "typeref", {
+				{ "name", "undefined" }
+		});
+	}
+	else
+	{
+		// The storage of a void return value is not valid, and the decompiler does not read it.
+		returnsymElement->addAttribute("typelock", "true");
+		childAddr(returnsymElement, "addr", storage[0].addr.isInvalid() ? returnAddr : storage[0].addr);
+		childType(returnsymElement, storage[0].type);
+	}
 
 	child(&doc, "addr", {
 			{ "space", arch->getDefaultCodeSpace()->getName() },
@@ -898,7 +958,7 @@ FunctionSymbol *RizinScope::registerRelocTarget(RzBinReloc *reloc) const
 }
 
 // Makes the function symbol of an import that is not a function in Rizin.
-// The symbol gets the args and the noreturn property of the type database signature of typeName.
+// The symbol gets the return type, the args and the noreturn property of the type database signature of typeName.
 FunctionSymbol *RizinScope::registerImportFunction(const Address &addr, const char *name, const char *typeName) const
 {
 	RzCoreLock core(arch->getCore());
@@ -917,9 +977,17 @@ FunctionSymbol *RizinScope::registerImportFunction(const Address &addr, const ch
 	}
 	std::vector<std::string> names;
 	std::vector<ParameterPieces> storage;
-	if(!proto || !typeDbArgs(arch, core, signature, proto, name, names, storage))
+	bool returnUsable = false;
+	if(!proto || !typeDbSignatureStorage(arch, core, signature, proto, name, names, storage, returnUsable))
 		return symbol;
 	FuncProto &prototype = symbol->getFunction()->getFuncProto();
+	if(returnUsable)
+	{
+		storage[0].flags |= ParameterPieces::typelock;
+		prototype.setOutput(storage[0]);
+	}
+	if(storage.size() == 1)
+		return symbol;
 	prototype.setModel(proto);
 	for(size_t i = 1; i < storage.size(); i++)
 	{

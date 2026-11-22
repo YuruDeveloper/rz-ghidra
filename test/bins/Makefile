@@ -44,6 +44,24 @@ import-direct32.exe: import-direct32.c import-direct32.def
 	clang --target=i686-w64-windows-gnu -O1 -fno-builtin -fno-optimize-sibling-calls -nostdlib -Wl,-e,_direct_main -o import-direct32.exe import-direct32.c -L. -limport-direct32-api
 	rm -f libimport-direct32-api.a
 
+# A PE for x86-64 with thunks. One import has a signature without args, and one has no signature.
+import-noargs.exe: import-noargs.c import-noargs.def
+	llvm-dlltool -m i386:x86-64 -d import-noargs.def -l libimport-noargs-api.a
+	clang --target=x86_64-w64-windows-gnu -O1 -fno-builtin -fno-optimize-sibling-calls -nostdlib -Wl,-e,noargs_main -o import-noargs.exe import-noargs.c -L. -limport-noargs-api -lkernel32
+	rm -f libimport-noargs-api.a
+
+# Two PE files for x86 with 32 bits. The imports return a 64-bit integer, a double, a float, a structure and nothing.
+# The first file has a thunk for each import. The second file calls each import through its slot.
+import-return32.exe: import-return32.c import-return32.def
+	llvm-dlltool -m i386 -d import-return32.def -l libimport-return32-api.a
+	clang --target=i686-w64-windows-gnu -O1 -fno-builtin -fno-optimize-sibling-calls -nostdlib -Wl,-e,_return_main -o import-return32.exe import-return32.c -L. -limport-return32-api
+	rm -f libimport-return32-api.a
+
+import-return32-slot.exe: import-return32.c import-return32.def
+	llvm-dlltool -m i386 -d import-return32.def -l libimport-return32-api.a
+	clang --target=i686-w64-windows-gnu -O1 -fno-builtin -fno-optimize-sibling-calls -nostdlib -Wl,-e,_return_main -DUSE_SLOTS -o import-return32-slot.exe import-return32.c -L. -limport-return32-api
+	rm -f libimport-return32-api.a
+
 # An ELF object file for x86-64. Each call of an import has a reloc.
 import-reloc.o: import-reloc.c
 	clang --target=x86_64-unknown-linux-gnu -O1 -fno-builtin -fno-optimize-sibling-calls -fno-pic -c -o import-reloc.o import-reloc.c
