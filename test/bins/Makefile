@@ -73,3 +73,7 @@ pointer-string.exe: pointer-string.c
 # A PE for x86-64 with pointers to functions and to a label in a function.
 callback-flag.exe: callback-flag.c
 	clang --target=x86_64-w64-windows-gnu -O1 -fno-builtin -fno-optimize-sibling-calls -nostdlib -Wl,-e,callback_main -o callback-flag.exe callback-flag.c -lmsvcrt-os
+
+# A PE for x86-64. A string starts in a read-only section and continues in a writable section.
+string-boundary.exe: string-boundary.s
+	clang --target=x86_64-w64-windows-gnu -nostdlib -Wl,-e,ProbeBoundary -Wl,--export-all-symbols -o string-boundary.exe string-boundary.s -lmsvcrt-os

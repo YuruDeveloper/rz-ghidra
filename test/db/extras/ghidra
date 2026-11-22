@@ -3999,6 +3999,36 @@ undefined * sym.callback_label(int64_t arg1)
 EOF
 RUN
 
+# The letter A of the string is the last byte of a read-only section. The letter B and the end of
+# the string are in a writable section, and the function writes the letter C on the letter B.
+# The decompiler rule examines only the first byte, thus the output shows the string "AB".
+# Ghidra has the same rule. This output is an accepted cost (review 1171).
+NAME=pointer flag at a string that continues in a writable section (review 1171, no string for a writable address)
+FILE=bins/string-boundary.exe
+CMDS=<<EOF
+aaa
+pdg @ entry0
+pdg @ sym.string_boundary.exe_ProbeWritable
+EOF
+EXPECT=<<EOF
+
+void entry0(void)
+{
+    // [00] -r-x section size 4096 named .text
+    *(undefined *)0x140005000 = 0x43;
+    sym.puts("AB");
+    return;
+}
+
+void sym.string_boundary.exe_ProbeWritable(void)
+{
+    *(undefined *)0x140005000 = 0x44;
+    sym.puts((char *)0x140005000);
+    return;
+}
+EOF
+RUN
+
 NAME=reloc target functions
 FILE=rizin-testbins/elf/linux-example-x86-32.ko
 CMDS=<<EOF
