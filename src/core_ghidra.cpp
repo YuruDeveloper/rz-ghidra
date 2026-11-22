@@ -217,31 +217,41 @@ static void Decompile(RzCore *core, ut64 addr, DecompileMode mode, std::stringst
 		throw LowlevelError("No function in Scope");
 
 	// Other archs are not tested
-	if (strcmp(rz_analysis_get_arch_target(core->analysis)->arch, "x86") == 0)
+	const bool isX86 = strcmp(rz_analysis_get_arch_target(core->analysis)->arch, "x86") == 0;
+	if (isX86)
 	{
 		// Must be called after arch.init(), but before decompiling the function
 		PcodeFixupPreprocessor::fixupSharedReturnJumpToRelocs(function, func, core, arch);
 		PcodeFixupPreprocessor::fixupCallsThroughImportSlots(function, func, core, arch);
 	}
 
-	arch.getCore()->sleepBegin();
 	auto action = arch.allacts.getCurrent();
 	int res;
-#ifndef DEBUG_EXCEPTIONS
-	try
+	for(int pass = 0;; pass++)
 	{
-#endif
-		action->reset(*func);
-		res = action->perform(*func);
+		arch.getCore()->sleepBegin();
 #ifndef DEBUG_EXCEPTIONS
-	}
-	catch(const LowlevelError &error)
-	{
-		arch.getCore()->sleepEndForce();
-		throw error;
-	}
+		try
+		{
 #endif
-	arch.getCore()->sleepEnd();
+			action->reset(*func);
+			res = action->perform(*func);
+#ifndef DEBUG_EXCEPTIONS
+		}
+		catch(const LowlevelError &error)
+		{
+			arch.getCore()->sleepEndForce();
+			throw error;
+		}
+#endif
+		arch.getCore()->sleepEnd();
+		// Only the data flow shows which calls go through a register to an import. A call
+		// gets the prototype of the import only as a direct call from the start, so the
+		// function is decompiled one more time with these calls as direct calls.
+		if(pass > 0 || res < 0 || !isX86 || !PcodeFixupPreprocessor::fixupCallsOfImportSlotValues(func, core, arch))
+			break;
+		arch.clearAnalysis(func);
+	}
 	if (res<0)
 		eprintf("break\n");
 	/*else

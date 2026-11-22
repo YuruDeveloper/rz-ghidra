@@ -3110,7 +3110,7 @@ void sym.malloc(size_t size, ...)
 {
     // WARNING: Could not recover jumptable at 0x0001400011c0. Too many branches
     // WARNING: Treating indirect jump as call
-    (*_sym.imp.msvcrt.dll_malloc)();
+    sym.imp.msvcrt.dll_malloc(size);
     return;
 }
 EOF
@@ -3157,7 +3157,7 @@ void sym.fprintf(FILE *stream, char *format, ...)
 {
     // WARNING: Could not recover jumptable at 0x0001400011a0. Too many branches
     // WARNING: Treating indirect jump as call
-    (*_sym.imp.msvcrt.dll_fprintf)();
+    sym.imp.msvcrt.dll_fprintf(stream, format);
     return;
 }
 EOF
@@ -3189,7 +3189,7 @@ void sym.vprintf(char *format, va_list ap, ...)
 {
     // WARNING: Could not recover jumptable at 0x000140001210. Too many branches
     // WARNING: Treating indirect jump as call
-    (*_sym.imp.msvcrt.dll_vprintf)();
+    sym.imp.msvcrt.dll_vprintf(format, ap);
     return;
 }
 EOF
@@ -3235,7 +3235,7 @@ void sym.api_large(aggregate *record, int marker, ...)
 {
     // WARNING: Could not recover jumptable at 0x000140001180. Too many branches
     // WARNING: Treating indirect jump as call
-    (*_sym.imp.import_args_api.dll_api_large)();
+    sym.imp.import_args_api.dll_api_large(record, marker);
     return;
 }
 
@@ -3243,7 +3243,7 @@ void sym.api_return(aggregate *rethidden, int marker, ...)
 {
     // WARNING: Could not recover jumptable at 0x000140001190. Too many branches
     // WARNING: Treating indirect jump as call
-    (*_sym.imp.import_args_api.dll_api_return)();
+    sym.imp.import_args_api.dll_api_return(rethidden, marker);
     return;
 }
 EOF
@@ -3409,24 +3409,17 @@ EXPECT=<<EOF
 
 int32_t __cdecl sym._direct_mixed(FILE **stream)
 {
-    code *pcVar1;
-    int32_t iVar2;
-    undefined4 uVar3;
-    char acStack_20 [20];
+    DWORD dwMilliseconds;
+    undefined4 uVar1;
     
     // [00] -r-x section size 4096 named .text
-    pcVar1 = _sym.imp.import_direct32_api.dll_Sleep;
-    acStack_20[0] = 'd';
-    acStack_20[1] = '\0';
-    acStack_20[2] = '\0';
-    acStack_20[3] = '\0';
-    (*_sym.imp.import_direct32_api.dll_Sleep)();
-    iVar2 = sym.imp.import_direct32_api.dll_fread(acStack_20, 1, 0x10, stream);
-    sym.imp.import_direct32_api.dll_MessageBoxA((HWND)0x0, acStack_20, "caption", 3);
-    uVar3 = sym.imp.import_direct32_api.dll_GetTickCount();
-    sym.imp.import_direct32_api.dll_printf("%u %lu %u", iVar2, uVar3, 7);
-    (*pcVar1)(iVar2);
-    return iVar2 + 1;
+    sym.imp.import_direct32_api.dll_Sleep(100);
+    dwMilliseconds = sym.imp.import_direct32_api.dll_fread(&stack0xffffffe0, 1, 0x10, stream);
+    sym.imp.import_direct32_api.dll_MessageBoxA((HWND)0x0, &stack0xffffffe0, "caption", 3);
+    uVar1 = sym.imp.import_direct32_api.dll_GetTickCount();
+    sym.imp.import_direct32_api.dll_printf("%u %lu %u", dwMilliseconds, uVar1, 7);
+    sym.imp.import_direct32_api.dll_Sleep(dwMilliseconds);
+    return dwMilliseconds + 1;
 }
 EOF
 RUN

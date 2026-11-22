@@ -44,3 +44,34 @@ void PcodeFixupPreprocessor::fixupCallsThroughImportSlots(RzAnalysisFunction *fu
 	});
 	rz_list_free(xrefs);
 }
+
+bool PcodeFixupPreprocessor::fixupCallsOfImportSlotValues(Funcdata *func, RzCore *core, RizinArchitecture &arch)
+{
+	AddrSpace *importSpace = arch.getImportSpace();
+	AddrSpace *dataSpace = arch.getDefaultDataSpace();
+	if(!importSpace)
+		return false;
+	bool found = false;
+	for(int4 i = 0; i < func->numCalls(); i++)
+	{
+		PcodeOp *op = func->getCallSpecs(i)->getOp();
+		if(op->code() != CPUI_CALLIND)
+			continue;
+		// The target is the value of an import slot if a copy of the slot comes to the call,
+		// for example "call edi" after "mov edi, [IAT slot]".
+		Varnode *vn = op->getIn(0);
+		bool isSlotValue = false;
+		for(;;)
+		{
+			isSlotValue = vn->getSpace() == dataSpace && vn->getSize() == (int4)dataSpace->getAddrSize() && RizinLoadImage::importSlotFlag(core, vn->getOffset());
+			if(isSlotValue || !vn->isWritten() || (vn->getDef()->code() != CPUI_COPY && vn->getDef()->code() != CPUI_CAST))
+				break;
+			vn = vn->getDef()->getIn(0);
+		}
+		if(!isSlotValue)
+			continue;
+		func->getOverride().insertIndirectOverride(op->getAddr(), Address(importSpace, vn->getOffset()));
+		found = true;
+	}
+	return found;
+}
