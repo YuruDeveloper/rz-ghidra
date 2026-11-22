@@ -86,6 +86,13 @@ struct-offset-dwarf2.exe: struct-offset.c
 struct-table.exe: struct-table.c
 	clang --target=x86_64-w64-windows-gnu -O1 -g -gdwarf-5 -fno-optimize-sibling-calls -nostdlib -Wl,-e,ReviewEntry -o struct-table.exe struct-table.c
 
+# Two PE files for x86-64 with DWARF 5 data and DWARF 2 data. A structure has an array with two dimensions and then one more member.
+struct-matrix.exe: struct-matrix.c
+	clang --target=x86_64-w64-windows-gnu -O1 -g -gdwarf-5 -fno-optimize-sibling-calls -nostdlib -Wl,-e,ReviewEntry -o struct-matrix.exe struct-matrix.c
+
+struct-matrix-dwarf2.exe: struct-matrix.c
+	clang --target=x86_64-w64-windows-gnu -O1 -g -gdwarf-2 -fno-optimize-sibling-calls -nostdlib -Wl,-e,ReviewEntry -o struct-matrix-dwarf2.exe struct-matrix.c
+
 # A PE for x86-64. A string starts in a read-only section and continues in a writable section.
 string-boundary.exe: string-boundary.s
 	clang --target=x86_64-w64-windows-gnu -nostdlib -Wl,-e,ProbeBoundary -Wl,--export-all-symbols -o string-boundary.exe string-boundary.s -lmsvcrt-os
