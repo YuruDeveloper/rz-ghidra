@@ -35,13 +35,7 @@ struct ImportSlotCtx {
 bool subtract_import_slot(RzFlagItem *fi, void *user)
 {
 	auto ctx = reinterpret_cast<ImportSlotCtx *>(user);
-	RzIOMap *map = rz_io_map_get(ctx->io, fi->offset);
-	if(!map || !map->user)
-		return true;
-	auto info = reinterpret_cast<RzCoreIOMapInfo *>(map->user);
-	// On ELF these flags sit on PLT stubs, not slots; the GOT slots behind them
-	// already resolve by name through their relocs.
-	if(info->perm_orig & RZ_PERM_X)
+	if(!RizinLoadImage::isImportSlot(ctx->io, fi))
 		return true;
 	// fi->size is not the slot extent: PE import flags carry 0, ELF ones the
 	// length of the PLT stub.
@@ -53,6 +47,33 @@ bool subtract_import_slot(RzFlagItem *fi, void *user)
 }
 
 } // namespace
+
+bool RizinLoadImage::isImportSlot(RzIO *io, const RzFlagItem *flag)
+{
+	RzIOMap *map = rz_io_map_get(io, flag->offset);
+	if(!map || !map->user)
+		return false;
+	auto info = reinterpret_cast<RzCoreIOMapInfo *>(map->user);
+	// On ELF these flags sit on PLT stubs, not slots; the GOT slots behind them
+	// already resolve by name through their relocs.
+	return !(info->perm_orig & RZ_PERM_X);
+}
+
+RzFlagItem *RizinLoadImage::importSlotFlag(RzCore *core, ut64 addr)
+{
+	const RzList *flags = rz_flag_get_list(core->flags, addr);
+	if(!flags)
+		return nullptr;
+	RzListIter *iter;
+	void *pos;
+	rz_list_foreach(flags, iter, pos)
+	{
+		auto flag = reinterpret_cast<RzFlagItem *>(pos);
+		if(flag->space && flag->space->name && !strcmp(flag->space->name, RZ_FLAGS_FS_IMPORTS) && isImportSlot(core->io, flag))
+			return flag;
+	}
+	return nullptr;
+}
 
 void RizinLoadImage::getReadonly(RangeList &list) const
 {

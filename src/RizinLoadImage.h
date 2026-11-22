@@ -28,6 +28,11 @@ class RizinLoadImage : public ghidra::LoadImage
 		void getReadonly(ghidra::RangeList &list) const override;
 		std::string getArchType() const override;
 		void adjustVma(long adjust) override;
+
+		// True if the flag of an import is on a slot that the loader fills, not on code.
+		static bool isImportSlot(RzIO *io, const RzFlagItem *flag);
+		// The flag of the import if the address is such a slot, for example in the IAT of a PE.
+		static RzFlagItem *importSlotFlag(RzCore *core, ut64 addr);
 };
 
 #endif //RZ_GHIDRA_RizinLOADIMAGE_H

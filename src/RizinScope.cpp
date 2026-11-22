@@ -3,6 +3,7 @@
 
 #include "RizinScope.h"
 #include "RizinArchitecture.h"
+#include "RizinLoadImage.h"
 #include "RizinTypeFactory.h"
 
 #include <cctype>
@@ -361,6 +362,104 @@ static std::string to_string(const char *str)
 	return std::string(str ? str : "(null)");
 }
 
+static void warnSignature(RizinArchitecture *arch, const std::string &name)
+{
+	arch->addWarning("Failed to apply the type database signature of " + name + ", args may be inaccurate.");
+}
+
+// The signature that the type database has for a function with a name from Rizin, for example "sym.imp.fread".
+static const RzCallable *typeDbSignature(RzCore *core, const char *name)
+{
+	RzTypeDB *typeDb = rz_analysis_get_type_db(core->analysis);
+	char *shortName = rz_analysis_function_name_guess(typeDb, const_cast<char *>(name));
+	const RzCallable *signature = rz_type_func_get(typeDb, shortName ? shortName : name);
+	rz_mem_free(shortName);
+	return signature;
+}
+
+// Gets the args of a type database signature with the storage that the prototype model gives them.
+// storage[0] is for the return value. names[i - 1] is the name of the arg in storage[i].
+// Returns false and leaves both lists empty if there is no signature with args or it cannot be used.
+static bool typeDbArgs(RizinArchitecture *arch, RzCore *core, const RzCallable *signature, ProtoModel *proto, const std::string &functionName, std::vector<std::string> &names, std::vector<ParameterPieces> &storage)
+{
+	names.clear();
+	storage.clear();
+	if(!signature || rz_pvector_empty(signature->args) || !signature->ret)
+		return false;
+	RzTypeDB *typeDb = rz_analysis_get_type_db(core->analysis);
+	PrototypePieces pieces;
+	pieces.model = proto;
+	pieces.name = functionName;
+	pieces.outtype = arch->getTypeFactory()->fromRzType(signature->ret, nullptr);
+	pieces.firstVarArgSlot = -1;
+	if(!pieces.outtype)
+		return false;
+	bool usable = rz_pvector_foreach_cpp<RzCallableArg>(signature->args, [&](RzCallableArg *arg) {
+		if(!arg || !arg->type)
+			return false;
+		// The type database writes the variable part of some functions as a last
+		// fixed arg: "void *va_args" in fprintf and fscanf, "va_list args" in sprintf,
+		// snprintf and sscanf. A call site supplies it or not, so the decompiler must
+		// find it there. Other names are real args, for example "va_list ap" in vprintf.
+		const bool isLast = arg == rz_pvector_tail(signature->args);
+		const bool isVaList = arg->type->kind == RZ_TYPE_KIND_IDENTIFIER && arg->type->identifier.name && !strcmp(arg->type->identifier.name, "va_list");
+		const bool isPlaceholder = arg->name && (!strcmp(arg->name, "va_args") || (isVaList && !strcmp(arg->name, "args")));
+		if(isLast && isPlaceholder)
+			return true;
+		std::string typeError;
+		Datatype *type = arch->getTypeFactory()->fromRzType(arg->type, &typeError);
+		if(!type)
+		{
+			char *tstr = rz_type_as_string(typeDb, arg->type);
+			arch->addWarning("Failed to match type " + to_string(tstr ? tstr : "?") + " for arg " + to_string(arg->name) + " of " + functionName + " to Decompiler type: " + typeError);
+			rz_mem_free(tstr);
+			type = arch->types->getBase(rz_asm_get_bits(core->rasm) / 8, TYPE_UNKNOWN);
+		}
+		if(!type || type->getSize() < 1)
+			return false;
+		pieces.intypes.push_back(type);
+		pieces.innames.push_back(arg->name && *arg->name ? arg->name : "param_" + to_string(pieces.innames.size()));
+		return true;
+	});
+	if(pieces.intypes.empty())
+		return false;
+	// Same procedure as FuncProto::updateAllTypes: the model gets the return type too,
+	// and each piece that it gives back is an input with its flags.
+	if(usable)
+	{
+		try
+		{
+			proto->assignParameterStorage(pieces, storage, true);
+		}
+		catch(const ParamUnassignedError &)
+		{
+			usable = false;
+		}
+	}
+	size_t nameIndex = 0;
+	for(size_t i = 1; usable && i < storage.size(); i++)
+	{
+		const ParameterPieces &piece = storage[i];
+		if(piece.addr.isInvalid() || !piece.type)
+			usable = false;
+		else if(piece.flags & ParameterPieces::hiddenretparm)
+			names.push_back("rethidden");
+		else if(nameIndex < pieces.innames.size())
+			names.push_back(pieces.innames[nameIndex++]);
+		else
+			usable = false;
+	}
+	if(usable && nameIndex != pieces.innames.size())
+		usable = false;
+	if(!usable)
+	{
+		warnSignature(arch, functionName);
+		names.clear();
+		storage.clear();
+	}
+	return usable;
+}
+
 FunctionSymbol *RizinScope::registerFunction(RzAnalysisFunction *fcn) const
 {
 	RzCoreLock core(arch->getCore());
@@ -694,74 +793,12 @@ FunctionSymbol *RizinScope::registerFunction(RzAnalysisFunction *fcn) const
 	bool argsFromTypeDb = false;
 	if(proto && argsByIndex.empty() && isImportThunk(core, fcn))
 	{
-		RzTypeDB *typeDb = rz_analysis_get_type_db(core->analysis);
-		char *shortName = rz_analysis_function_name_guess(typeDb, fcn->name);
-		const RzCallable *signature = rz_type_func_get(typeDb, shortName ? shortName : fcn->name);
-		rz_mem_free(shortName);
-		const bool hasSignature = signature && !rz_pvector_empty(signature->args);
-		PrototypePieces pieces;
-		pieces.model = proto;
-		pieces.name = fcn_name;
-		pieces.outtype = hasSignature && signature->ret ? arch->getTypeFactory()->fromRzType(signature->ret, nullptr) : nullptr;
-		pieces.firstVarArgSlot = -1;
-		bool usable = hasSignature && pieces.outtype;
-		if(usable)
-		{
-			usable = rz_pvector_foreach_cpp<RzCallableArg>(signature->args, [&](RzCallableArg *arg) {
-				if(!arg || !arg->type)
-					return false;
-				// The type database writes the variable part of some functions as a last
-				// fixed arg: "void *va_args" in fprintf and fscanf, "va_list args" in sprintf,
-				// snprintf and sscanf. A call site supplies it or not, so the decompiler must
-				// find it there. Other names are real args, for example "va_list ap" in vprintf.
-				const bool isLast = arg == rz_pvector_tail(signature->args);
-				const bool isVaList = arg->type->kind == RZ_TYPE_KIND_IDENTIFIER && arg->type->identifier.name && !strcmp(arg->type->identifier.name, "va_list");
-				const bool isPlaceholder = arg->name && (!strcmp(arg->name, "va_args") || (isVaList && !strcmp(arg->name, "args")));
-				if(isLast && isPlaceholder)
-					return true;
-				std::string typeError;
-				Datatype *type = arch->getTypeFactory()->fromRzType(arg->type, &typeError);
-				if(!type)
-				{
-					char *tstr = rz_type_as_string(typeDb, arg->type);
-					arch->addWarning("Failed to match type " + to_string(tstr ? tstr : "?") + " for arg " + to_string(arg->name) + " of " + to_string(fcn_name) + " to Decompiler type: " + typeError);
-					rz_mem_free(tstr);
-					type = arch->types->getBase(rz_asm_get_bits(core->rasm) / 8, TYPE_UNKNOWN);
-				}
-				if(!type || type->getSize() < 1)
-					return false;
-				pieces.intypes.push_back(type);
-				pieces.innames.push_back(arg->name && *arg->name ? arg->name : "param_" + to_string(pieces.innames.size()));
-				return true;
-			});
-		}
-		if(pieces.intypes.empty())
-			usable = false;
-		// Same procedure as FuncProto::updateAllTypes: the model gets the return type too,
-		// and each piece that it gives back becomes an input symbol with its flags.
+		std::vector<std::string> names;
 		std::vector<ParameterPieces> storage;
-		if(usable)
-		{
-			try
-			{
-				proto->assignParameterStorage(pieces, storage, true);
-			}
-			catch(const ParamUnassignedError &)
-			{
-				usable = false;
-			}
-		}
-		size_t namedPieces = 0;
+		bool usable = typeDbArgs(arch, core, typeDbSignature(core, fcn->name), proto, to_string(fcn_name), names, storage);
 		for(size_t i = 1; usable && i < storage.size(); i++)
 		{
 			const ParameterPieces &piece = storage[i];
-			if(piece.addr.isInvalid() || !piece.type)
-			{
-				usable = false;
-				break;
-			}
-			if(!(piece.flags & ParameterPieces::hiddenretparm))
-				namedPieces++;
 			uintb last = piece.addr.getOffset() + piece.type->getSize() - 1;
 			for(const auto &range : varRanges)
 			{
@@ -771,25 +808,21 @@ FunctionSymbol *RizinScope::registerFunction(RzAnalysisFunction *fcn) const
 				break;
 			}
 		}
-		if(usable && namedPieces != pieces.intypes.size())
-			usable = false;
-		if(hasSignature && !pieces.intypes.empty() && !usable)
-			arch->addWarning("Failed to apply the type database signature of " + to_string(fcn_name) + ", args may be inaccurate.");
-		size_t nameIndex = 0;
+		if(!usable && !storage.empty())
+			warnSignature(arch, to_string(fcn_name));
 		for(size_t i = 1; usable && i < storage.size(); i++)
 		{
 			const ParameterPieces &piece = storage[i];
-			const bool isHiddenReturn = (piece.flags & ParameterPieces::hiddenretparm) != 0;
 			auto mapsymElement = child(symbollistElement, "mapsym");
 			auto symbolElement = child(mapsymElement, "symbol", {
-					{ "name", isHiddenReturn ? "rethidden" : pieces.innames[nameIndex++] },
+					{ "name", names[i - 1] },
 					{ "typelock", "true" },
 					{ "namelock", "true" },
 					{ "readonly", "false" },
 					{ "cat", "0" },
 					{ "index", to_string(i - 1) }
 			});
-			if(isHiddenReturn)
+			if(piece.flags & ParameterPieces::hiddenretparm)
 				symbolElement->addAttribute("hiddenretparm", "true");
 			if(piece.flags & ParameterPieces::indirectstorage)
 				symbolElement->addAttribute("indirectstorage", "true");
@@ -862,6 +895,52 @@ FunctionSymbol *RizinScope::registerRelocTarget(RzBinReloc *reloc) const
 	if(!reloc->import || !reloc->import->name)
 		return nullptr;
 	return cache->addFunction(Address(arch->getDefaultCodeSpace(), reloc->target_vaddr), reloc->import->name);
+}
+
+// Makes the function symbol of an import that is not a function in Rizin.
+// The symbol gets the args of the type database signature of typeName.
+FunctionSymbol *RizinScope::registerImportFunction(const Address &addr, const char *name, const char *typeName) const
+{
+	RzCoreLock core(arch->getCore());
+	FunctionSymbol *symbol = cache->addFunction(addr, name);
+	if(!symbol)
+		return nullptr;
+	const RzCallable *signature = typeDbSignature(core, typeName);
+	// The type factory makes the same choice for a callable type.
+	ProtoModel *proto = signature && signature->cc ? arch->protoModelFromRizinCC(signature->cc) : nullptr;
+	if(!proto)
+	{
+		const char *cc = rz_analysis_cc_default(core->analysis);
+		proto = cc ? arch->protoModelFromRizinCC(cc) : nullptr;
+	}
+	std::vector<std::string> names;
+	std::vector<ParameterPieces> storage;
+	if(!proto || !typeDbArgs(arch, core, signature, proto, name, names, storage))
+		return symbol;
+	FuncProto &prototype = symbol->getFunction()->getFuncProto();
+	prototype.setModel(proto);
+	for(size_t i = 1; i < storage.size(); i++)
+	{
+		storage[i].flags |= ParameterPieces::typelock | ParameterPieces::namelock;
+		prototype.setParam(i - 1, names[i - 1], storage[i]);
+	}
+	prototype.setDotdotdot(true);
+	return symbol;
+}
+
+// Makes the function symbol of the import behind an import slot, for example in the IAT of a PE.
+// PcodeFixupPreprocessor::fixupCallsThroughImportSlots makes the calls through the slot go to this symbol.
+FunctionSymbol *RizinScope::queryRizinImport(ut64 slotAddr) const
+{
+	RzCoreLock core(arch->getCore());
+	RzFlagItem *flag = RizinLoadImage::importSlotFlag(core, slotAddr);
+	if(!flag)
+		return nullptr;
+	const char *name = (core->flags->realnames && flag->realname) ? flag->realname : flag->name;
+	FunctionSymbol *symbol = registerImportFunction(Address(arch->getImportSpace(), slotAddr), name, flag->name);
+	if(symbol && rz_analysis_noreturn_at(core->analysis, slotAddr))
+		symbol->getFunction()->getFuncProto().setNoReturn(true);
+	return symbol;
 }
 
 Symbol *RizinScope::registerFlag(RzFlagItem *flag) const
@@ -1041,6 +1120,9 @@ Symbol *RizinScope::queryRizin(const Address &addr, bool contain) const
 {
 	if(addr.getSpace() == arch->getDefaultCodeSpace() || addr.getSpace() == arch->getDefaultDataSpace())
 		return queryRizinAbsolute(addr.getOffset(), contain);
+	AddrSpace *importSpace = arch->getImportSpace();
+	if(importSpace && addr.getSpace() == importSpace)
+		return queryRizinImport(addr.getOffset());
 	return nullptr;
 }
 

@@ -218,8 +218,11 @@ static void Decompile(RzCore *core, ut64 addr, DecompileMode mode, std::stringst
 
 	// Other archs are not tested
 	if (strcmp(rz_analysis_get_arch_target(core->analysis)->arch, "x86") == 0)
+	{
 		// Must be called after arch.init(), but before decompiling the function
 		PcodeFixupPreprocessor::fixupSharedReturnJumpToRelocs(function, func, core, arch);
+		PcodeFixupPreprocessor::fixupCallsThroughImportSlots(function, func, core, arch);
+	}
 
 	arch.getCore()->sleepBegin();
 	auto action = arch.allacts.getCurrent();

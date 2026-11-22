@@ -1,0 +1,7 @@
+LIBRARY import-direct32-api.dll
+EXPORTS
+Sleep@4
+GetTickCount@0
+MessageBoxA@16
+printf
+fread

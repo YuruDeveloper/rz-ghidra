@@ -35,6 +35,10 @@ class RizinArchitecture : public ghidra::SleighArchitecture
 		ghidra::ProtoModel *protoModelFromRizinCC(const char *cc);
 		ghidra::Address registerAddressFromRizinReg(const char *regname);
 
+		// An import has no address in the program. The function symbol of the import behind
+		// an import slot is at the offset of the slot in this space, where no part of the program is.
+		ghidra::AddrSpace *getImportSpace() const { return getSpaceByName("OTHER"); }
+
 		void addWarning(const std::string &warning)	{ warnings.push_back(warning); }
 		const std::vector<std::string> getWarnings() const { return warnings; }
 		ghidra::ContextDatabase *getContextDatabase();

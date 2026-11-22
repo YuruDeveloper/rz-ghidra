@@ -25,3 +25,22 @@ void PcodeFixupPreprocessor::fixupSharedReturnJumpToRelocs(RzAnalysisFunction *f
 		}
 	});
 }
+
+void PcodeFixupPreprocessor::fixupCallsThroughImportSlots(RzAnalysisFunction *function, Funcdata *func, RzCore *core, RizinArchitecture &arch)
+{
+	AddrSpace *importSpace = arch.getImportSpace();
+	RzList *xrefs = rz_analysis_function_get_xrefs_from(function);
+	if(!importSpace || !xrefs)
+	{
+		rz_list_free(xrefs);
+		return;
+	}
+	rz_list_foreach_cpp<RzAnalysisXRef>(xrefs, [&](RzAnalysisXRef *xref){
+		// A call instruction that refers to an import slot, for example in the IAT of a PE,
+		// calls the import behind the slot. As a direct call from the start it gets the
+		// prototype of the import in the same way as a call of an import thunk.
+		if (xref->type == RZ_ANALYSIS_XREF_TYPE_CALL && RizinLoadImage::importSlotFlag(core, xref->to))
+			func->getOverride().insertIndirectOverride(Address(arch.getDefaultCodeSpace(), xref->from), Address(importSpace, xref->to));
+	});
+	rz_list_free(xrefs);
+}
