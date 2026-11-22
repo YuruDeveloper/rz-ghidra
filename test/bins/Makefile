@@ -77,3 +77,7 @@ callback-flag.exe: callback-flag.c
 # A PE for x86-64. A string starts in a read-only section and continues in a writable section.
 string-boundary.exe: string-boundary.s
 	clang --target=x86_64-w64-windows-gnu -nostdlib -Wl,-e,ProbeBoundary -Wl,--export-all-symbols -o string-boundary.exe string-boundary.s -lmsvcrt-os
+
+# A PE for x86-64 with one string in a writable section and one string in a read-only section.
+writable-string.exe: writable-string.c
+	clang --target=x86_64-w64-windows-gnu -O1 -fno-builtin -fno-optimize-sibling-calls -nostdlib -Wl,-e,writable_main -o writable-string.exe writable-string.c -lmsvcrt-os

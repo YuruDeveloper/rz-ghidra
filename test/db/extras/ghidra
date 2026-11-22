@@ -3752,13 +3752,13 @@ int64_t dbg.main(void)
     iVar2 = arg1;
     arg1._0_4_ = (*fcns[1])(&a);
     uVar1 = (undefined4)arg1;
-    section.1.__TEXT.__stubs("");
+    section.1.__TEXT.__stubs(str.cstr.Hello_Wor);
     arg1 = fcn.100003d84(&sym.class_Test);
     fcn.100003da8(arg1, "methodWithoutArgs");
     fcn.100003da8(arg1, "methodWithOneArg:", 0x7b);
     fcn.100003da8(arg1, "methodWithTwoArgs:secondArg:", 0x539, uVar1);
     fcn.100003da8(arg1, "methodWithReturn");
-    section.1.__TEXT.__stubs("");
+    section.1.__TEXT.__stubs(str.cstr.Got);
     fcn.100003d90(iVar2);
     arg1 = 0;
     return arg1;
@@ -3791,13 +3791,13 @@ int64_t dbg.main(void)
     iVar2 = arg1;
     arg1._0_4_ = (*fcns[1])(&a);
     uVar1 = (undefined4)arg1;
-    section.1.__TEXT.__stubs("");
+    section.1.__TEXT.__stubs(str.cstr.Hello_Wor);
     arg1 = fcn.100003d84(*(undefined8 *)0x100008110);
     fcn.100003da8(arg1, *(undefined8 *)0x1000080f0);
     fcn.100003da8(arg1, *(undefined8 *)0x1000080f8, 0x7b);
     fcn.100003da8(arg1, *(undefined8 *)0x100008100, 0x539, uVar1);
     fcn.100003da8(arg1, *(undefined8 *)0x100008108);
-    section.1.__TEXT.__stubs("");
+    section.1.__TEXT.__stubs(str.cstr.Got);
     fcn.100003d90(iVar2);
     arg1 = 0;
     return arg1;
@@ -4024,6 +4024,34 @@ void sym.string_boundary.exe_ProbeWritable(void)
 {
     *(undefined *)0x140005000 = 0x44;
     sym.puts((char *)0x140005000);
+    return;
+}
+EOF
+RUN
+
+# The first function writes a letter into a string in a writable section and then gives the
+# string to puts. The output must show the name of the string and not its initial text.
+# The string of the second function is in a read-only section, and the output must show its text.
+NAME=string flag in a writable section (name for a writable string, text for a read-only string)
+FILE=bins/writable-string.exe
+CMDS=<<EOF
+aaa
+pdg @ sym.writable_banner
+pdg @ sym.writable_constant
+EOF
+EXPECT=<<EOF
+
+void sym.writable_banner(void)
+{
+    // [00] -r-x section size 4096 named .text
+    str.hello_world[0] = 'J';
+    sym.puts(str.hello_world);
+    return;
+}
+
+void sym.writable_constant(void)
+{
+    sym.puts("constant text");
     return;
 }
 EOF
