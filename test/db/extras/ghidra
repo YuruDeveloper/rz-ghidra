@@ -4428,3 +4428,20 @@ void dbg.set_exact(exact *item, unsigned int quantity)
 EOF
 RUN
 
+NAME=structure from DWARF with a member after an array of structures (review 1201, member offsets from Rizin)
+FILE=bins/struct-table.exe
+CMDS=<<EOF
+aaa
+pdg @ dbg.SetTail
+EOF
+EXPECT=<<EOF
+
+void dbg.SetTail(Table *table, unsigned int value)
+{
+    // [00] -r-x section size 4096 named .text
+    table->Tail = value;
+    return;
+}
+EOF
+RUN
+
