@@ -4517,7 +4517,7 @@ void dbg.set_padded(padded *item, unsigned int quantity)
 EOF
 RUN
 
-NAME=structure from DWARF 2 with member offsets that Rizin does not decode (packed layout)
+NAME=structure from DWARF 2 with member offsets in DW_OP_plus_uconst (member offsets from Rizin)
 FILE=bins/struct-offset-dwarf2.exe
 CMDS=<<EOF
 aaa
@@ -4530,7 +4530,7 @@ void dbg.set_padded(padded *item, unsigned int quantity)
 {
     // [00] -r-x section size 4096 named .text
     item->name[0] = '\0';
-    *(unsigned int *)((int64_t)&item->quantity + 2) = quantity;
+    item->quantity = quantity;
     return;
 }
 
@@ -4539,7 +4539,7 @@ void dbg.set_padded(padded *item, unsigned int quantity)
 void dbg.set_tagged(tagged *item, unsigned int quantity)
 {
     item->kind = '\x01';
-    *(unsigned int *)((int64_t)&item[2].quantity + 1) = quantity;
+    item->quantity = quantity;
     return;
 }
 EOF
@@ -4607,7 +4607,7 @@ void dbg.SetTrailer(MatrixRecord *record, unsigned char value)
 EOF
 RUN
 
-NAME=structure from DWARF 2 with a member after an array with two dimensions (review 1217, packed layout)
+NAME=structure from DWARF 2 with a member after an array with two dimensions (review 1217, member offsets from Rizin)
 FILE=bins/struct-matrix-dwarf2.exe
 CMDS=<<EOF
 aaa
