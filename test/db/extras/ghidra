@@ -5021,7 +5021,7 @@ void dbg.SetNamePart(NameWhole *whole)
     undefined4 uVar1;
     uint32_t in_EDX;
     
-    INSERT(*whole, in_EDX, 0x10, 5);
+    uVar1 = INSERT(*whole, in_EDX, 0x10, 5);
     whole->Whole = (int16_t)uVar1;
     *(int16_t *)&whole->field_0x2 = SUB42(uVar1, 2);
     return;
@@ -5036,7 +5036,7 @@ void dbg.SetNameInner(NameOuter *outer, unsigned int value)
 
 void dbg.SetNameGlobal(unsigned int value)
 {
-    INSERT(NameGlobals[1]._0_4_, value, 1, 3);
+    NameGlobals[1]._0_4_ = INSERT(NameGlobals[1]._0_4_, value, 1, 3);
     NameGlobals[1].Tail = value;
     AfterNameGlobals = value;
     return;
