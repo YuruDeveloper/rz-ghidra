@@ -111,6 +111,11 @@ pdb-array.exe: pdb-array.cpp
 struct-global.exe: struct-global.c
 	clang --target=x86_64-w64-windows-gnu -O1 -g -gdwarf-5 -fno-optimize-sibling-calls -nostdlib -Wl,-e,GlobalEntry -o struct-global.exe struct-global.c
 
+# A PE for x86-64 with DWARF 5 data. The structures have bit-fields. The compiler writes only
+# DW_AT_data_bit_offset for the position of a bit-field.
+struct-bits.exe: struct-bits.c
+	clang --target=x86_64-w64-windows-gnu -O1 -g -gdwarf-5 -fno-optimize-sibling-calls -fdebug-compilation-dir=. -nostdlib -Wl,-e,BitsEntry -o struct-bits.exe struct-bits.c
+
 # A PE for x86-64. A string starts in a read-only section and continues in a writable section.
 string-boundary.exe: string-boundary.s
 	clang --target=x86_64-w64-windows-gnu -nostdlib -Wl,-e,ProbeBoundary -Wl,--export-all-symbols -o string-boundary.exe string-boundary.s -lmsvcrt-os
