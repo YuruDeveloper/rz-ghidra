@@ -4631,6 +4631,58 @@ void dbg.SetTrailer(MatrixRecord *record, unsigned char value)
 EOF
 RUN
 
+NAME=structure from DWARF 2 with member locations that Rizin does not decode (review 1345, sum of the member sizes)
+FILE=bins/struct-location.exe
+CMDS=<<EOF
+aaa
+tsl LocationMixed
+tsl LocationGap
+tsl LocationTight
+tsl LocationOuter
+pdg @ dbg.SetMixed
+pdg @ dbg.SetOuter
+pdg @ dbg.SetMixes
+EOF
+EXPECT=<<EOF
+struct LocationMixed:
+	Flags: unsigned int (size = 4, offset = 0)
+	MixedValue: unsigned int (size = 4, offset = 4)
+struct LocationGap:
+	Tag: unsigned char (size = 1, offset = 0)
+	GapValue: unsigned int (size = 4, offset = 1)
+	GapLast: unsigned int (size = 4, offset = 5)
+struct LocationTight:
+	First: unsigned int (size = 4, offset = 0)
+	TightSecond: unsigned int (size = 4, offset = 4)
+	Third: unsigned int (size = 4, offset = 8)
+struct LocationOuter:
+	Kind: unsigned char (size = 1, offset = 0)
+	Inner: struct LocationMixed (size = 8, offset = 4)
+	Tail: unsigned int (size = 4, offset = 12)
+
+void dbg.SetMixed(LocationMixed *mixed, unsigned int value)
+{
+    // [00] -r-x section size 4096 named .text
+    mixed->MixedValue = value;
+    return;
+}
+
+void dbg.SetOuter(LocationOuter *outer, unsigned int value)
+{
+    (outer->Inner).MixedValue = value;
+    outer->Tail = value;
+    return;
+}
+
+void dbg.SetMixes(unsigned int value)
+{
+    Mixes[1].MixedValue = value;
+    AfterMixes = value;
+    return;
+}
+EOF
+RUN
+
 NAME=structure from a PDB file with a member after an array of structures (review 1237, element count of the array)
 FILE=bins/pdb-array.exe
 CMDS=<<EOF
