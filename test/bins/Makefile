@@ -99,6 +99,11 @@ struct-matrix-dwarf2.exe: struct-matrix.c
 pdb-array.exe: pdb-array.cpp
 	clang --target=x86_64-pc-windows-msvc -std=c++20 -O1 -g -gcodeview -fno-builtin -fno-optimize-sibling-calls -fno-exceptions -fno-rtti -nostdlib -fuse-ld=lld -Wl,/entry:PdbArrayEntry,/debug,/pdb:pdb-array.pdb,/pdbaltpath:pdb-array.pdb,/nodefaultlib,/subsystem:console -o pdb-array.exe pdb-array.cpp
 
+# A PE for x86-64 with DWARF 5 data. Two global arrays have structures as elements.
+# The compiler puts two bytes between the two members of each structure.
+struct-global.exe: struct-global.c
+	clang --target=x86_64-w64-windows-gnu -O1 -g -gdwarf-5 -fno-optimize-sibling-calls -nostdlib -Wl,-e,GlobalEntry -o struct-global.exe struct-global.c
+
 # A PE for x86-64. A string starts in a read-only section and continues in a writable section.
 string-boundary.exe: string-boundary.s
 	clang --target=x86_64-w64-windows-gnu -nostdlib -Wl,-e,ProbeBoundary -Wl,--export-all-symbols -o string-boundary.exe string-boundary.s -lmsvcrt-os

@@ -4728,3 +4728,26 @@ struct Utf8Record {
 EOF
 RUN
 
+NAME=global arrays of structures with bytes between the members (DWARF 5, the size of the structure comes from the debug data)
+FILE=bins/struct-global.exe
+CMDS=<<EOF
+aaa
+avgl
+pdg @ dbg.SetThings
+EOF
+EXPECT=<<EOF
+global struct anonymous_struct_0x3e [3] Things @ 0x140004000
+global struct Pair [3] Pairs @ 0x140004020
+global int [4] Numbers @ 0x140004040
+
+void dbg.SetThings(unsigned int value)
+{
+    // [00] -r-x section size 4096 named .text
+    Things[2].Quantity = value;
+    Pairs[2].Quantity = value;
+    Numbers[3] = (int)value;
+    return;
+}
+EOF
+RUN
+
