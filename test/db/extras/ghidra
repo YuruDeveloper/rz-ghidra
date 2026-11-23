@@ -4631,3 +4631,123 @@ void dbg.SetTrailer(MatrixRecord *record, unsigned char value)
 EOF
 RUN
 
+NAME=structure from a PDB file with a member after an array of structures (review 1237, element count of the array)
+FILE=bins/pdb-array.exe
+CMDS=<<EOF
+idp bins/pdb-array.pdb
+aaa
+afvr rcx table "struct PairTable *" @ pdb.pdb_array.SetItem
+pdg @ pdb.pdb_array.SetItem
+afvr rcx table "struct PairTable *" @ pdb.pdb_array.SetTableTail
+pdg @ pdb.pdb_array.SetTableTail
+EOF
+EXPECT=<<EOF
+
+void pdb.pdb_array.SetItem(PairTable *table, int64_t arg2)
+{
+    // [00] -r-x section size 4096 named .text
+    table->Items[2].Quantity = (uint32_t)arg2;
+    return;
+}
+
+void pdb.pdb_array.SetTableTail(PairTable *table, int64_t arg2)
+{
+    table->Tail = (uint32_t)arg2;
+    return;
+}
+EOF
+RUN
+
+NAME=structure from a PDB file with a member after an array with two dimensions (review 1237, element count of the array)
+FILE=bins/pdb-array.exe
+CMDS=<<EOF
+idp bins/pdb-array.pdb
+aaa
+afvr rcx record "struct GridRecord *" @ pdb.pdb_array.SetGrid
+pdg @ pdb.pdb_array.SetGrid
+afvr rcx record "struct GridRecord *" @ pdb.pdb_array.SetGridTail
+pdg @ pdb.pdb_array.SetGridTail
+EOF
+EXPECT=<<EOF
+
+void pdb.pdb_array.SetGrid(GridRecord *record)
+{
+    int16_t in_DX;
+    
+    record->Grid[1][2] = in_DX;
+    return;
+}
+
+void pdb.pdb_array.SetGridTail(GridRecord *record, int64_t arg2)
+{
+    record->Tail = (uint32_t)arg2;
+    return;
+}
+EOF
+RUN
+
+NAME=structure from a PDB file with a member after a wchar_t array (review 1237, wchar_t has 2 bytes)
+FILE=bins/pdb-array.exe
+CMDS=<<EOF
+idp bins/pdb-array.pdb
+aaa
+afvr rcx record "struct WideRecord *" @ pdb.pdb_array.SetWide
+pdg @ pdb.pdb_array.SetWide
+afvr rcx record "struct WideRecord *" @ pdb.pdb_array.SetWideTail
+pdg @ pdb.pdb_array.SetWideTail
+EOF
+EXPECT=<<EOF
+
+void pdb.pdb_array.SetWide(WideRecord *record)
+{
+    wchar_t in_DX;
+    
+    record->Wide[0xf] = in_DX;
+    return;
+}
+
+void pdb.pdb_array.SetWideTail(WideRecord *record, int64_t arg2)
+{
+    record->Tail = (uint32_t)arg2;
+    return;
+}
+EOF
+RUN
+
+NAME=structure from a PDB file with a char8_t array (review 1237, Rizin has no size for the element type)
+FILE=bins/pdb-array.exe
+CMDS=<<EOF
+idp bins/pdb-array.pdb
+tsc Utf8Record
+EOF
+EXPECT=<<EOF
+struct Utf8Record {
+	unknown_t Utf8[5];
+	uint32_t Tail;
+};
+EOF
+RUN
+
+NAME=global arrays of structures with bytes between the members (DWARF 5, the size of the structure comes from the debug data)
+FILE=bins/struct-global.exe
+CMDS=<<EOF
+aaa
+avgl
+pdg @ dbg.SetThings
+EOF
+EXPECT=<<EOF
+global struct anonymous_struct_0x3e [3] Things @ 0x140004000
+global struct Pair [3] Pairs @ 0x140004020
+global int [4] Numbers @ 0x140004040
+
+void dbg.SetThings(unsigned int value)
+{
+    // [00] -r-x section size 4096 named .text
+    Things[2].Quantity = value;
+    Pairs[2].Quantity = value;
+    Numbers[3] = (int)value;
+    return;
+}
+EOF
+RUN
+
