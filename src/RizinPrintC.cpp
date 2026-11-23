@@ -75,15 +75,13 @@ std::string RizinPrintC::genericFunctionName(const ghidra::Address &addr)
 
 void RizinPrintC::emitBitFieldExpression(const PcodeOp *op)
 {
-	InsertExpression expression(op);
-	const Varnode *output = op->getOut();
-	if(expression.isValid() || !output)
+	if(InsertExpression(op).isValid())
 	{
 		PrintC::emitBitFieldExpression(op);
 		return;
 	}
 	pushOp(&assignment, op);
-	pushSymbolDetail(output, op, false);
+	pushSymbolDetail(op->getOut(), op, false);
 	opFunc(op);
 	recurse();
 }
