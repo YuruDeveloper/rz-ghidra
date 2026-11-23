@@ -93,6 +93,13 @@ struct-matrix.exe: struct-matrix.c
 struct-matrix-dwarf2.exe: struct-matrix.c
 	clang --target=x86_64-w64-windows-gnu -O1 -g -gdwarf-2 -fno-optimize-sibling-calls -nostdlib -Wl,-e,ReviewEntry -o struct-matrix-dwarf2.exe struct-matrix.c
 
+# A PE for x86-64 with DWARF 2 data. The location of three structure members is "DW_OP_lit<n>, DW_OP_plus".
+# The compiler writes "DW_OP_plus_uconst <n>" for these members. The file struct-location.s is the output of
+# the command below, and then a person changed the three locations in it.
+# clang --target=x86_64-w64-windows-gnu -O1 -g -gdwarf-2 -fno-optimize-sibling-calls -fdebug-compilation-dir=. -S -o struct-location.s struct-location.c
+struct-location.exe: struct-location.s
+	clang --target=x86_64-w64-windows-gnu -nostdlib -Wl,-e,LocationEntry -o struct-location.exe struct-location.s
+
 # A PE for x86-64 with the PDB file pdb-array.pdb. Three structures have an array and then one more member.
 # The arrays are an array of structures, an array with two dimensions and a wchar_t array.
 # One more structure has a char8_t array. Rizin has no size for this element type in a PDB file.
