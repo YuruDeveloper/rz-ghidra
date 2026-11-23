@@ -4480,7 +4480,7 @@ void dbg.set_tagged(tagged *item, unsigned int quantity)
 EOF
 RUN
 
-NAME=structure from DWARF with bit-fields at the same offset (packed layout)
+NAME=structure from DWARF with bit-fields before the other members (member offsets from Rizin)
 FILE=bins/struct-offset.exe
 CMDS=<<EOF
 aaa
@@ -4490,8 +4490,8 @@ EXPECT=<<EOF
 
 void dbg.set_flags(flags *item, unsigned int quantity)
 {
-    *(undefined *)&item->high = 0;
-    *(unsigned int *)(item->name + 0x18) = quantity;
+    item->name[0] = '\0';
+    item->quantity = quantity;
     return;
 }
 EOF
@@ -4800,6 +4800,126 @@ void dbg.SetThings(unsigned int value)
     Numbers[3] = (int)value;
     return;
 }
+EOF
+RUN
+
+NAME=structure from DWARF 5 with bit-fields (letter 1359, the plugin gives only the other members to the decompiler)
+FILE=bins/struct-bits.exe
+CMDS=<<EOF
+aaa
+pdg @ dbg.SetBitsSqueeze
+pdg @ dbg.SetBitsTwoUnits
+pdg @ dbg.SetBitsAnchor
+pdg @ dbg.SetBitsOuter
+pdg @ dbg.SetBitsRow
+pdg @ dbg.SetBitsMode
+pdg @ dbg.SetBitsItem
+pdg @ dbg.SetBitsOuters
+pdg @ dbg.SetBitsWides
+EOF
+EXPECT=<<EOF
+
+void dbg.SetBitsSqueeze(BitsSqueeze *squeeze, int value)
+{
+    // [00] -r-x section size 4096 named .text
+    squeeze->Tag = SUB41(value, 0);
+    squeeze->Tail = value;
+    return;
+}
+
+void dbg.SetBitsTwoUnits(BitsTwoUnits *two, unsigned int value)
+{
+    two->Last = SUB42(value, 0);
+    return;
+}
+
+void dbg.SetBitsAnchor(BitsAnchor *anchor, long long value)
+{
+    anchor->Wide = value;
+    return;
+}
+
+void dbg.SetBitsOuter(BitsOuter *outer, unsigned int value)
+{
+    outer->Kind = SUB41(value, 0);
+    outer->Tail = value;
+    return;
+}
+
+void dbg.SetBitsRow(BitsRow *row, unsigned int value)
+{
+    row->Mark = SUB41(value, 0);
+    row->Tail = value;
+    return;
+}
+
+void dbg.SetBitsMode(BitsAnchor *anchor, BitsWide mode)
+{
+    anchor->Mode = mode;
+    return;
+}
+
+void dbg.SetBitsItem(BitsRow *row, BitsWide item)
+{
+    row->Items[2] = item;
+    return;
+}
+
+void dbg.SetBitsOuters(unsigned int value)
+{
+    BitsOuters[1].Tail = value;
+    AfterBitsOuters = value;
+    return;
+}
+
+void dbg.SetBitsWides(BitsWide item, unsigned int value)
+{
+    BitsWides[2] = item;
+    AfterBitsWides = value;
+    return;
+}
+EOF
+RUN
+
+NAME=offsets of bit-fields from DW_AT_data_bit_offset (letter 1359, tsl shows the byte of the first bit)
+FILE=bins/struct-bits.exe
+CMDS=<<EOF
+aaa
+tsl BitsWide
+tsl BitsSqueeze
+tsl BitsTwoUnits
+tsl BitsAnchor
+tsl BitsOuter
+tsl BitsRow
+EOF
+EXPECT=<<EOF
+struct BitsWide:
+	A: unsigned int (size = 4, offset = 0)
+	B: unsigned int (size = 4, offset = 0)
+	C: unsigned int (size = 4, offset = 1)
+	D: unsigned int (size = 4, offset = 2)
+struct BitsSqueeze:
+	Tag: char (size = 1, offset = 0)
+	Mid: int (size = 4, offset = 1)
+	Tail: int (size = 4, offset = 4)
+struct BitsTwoUnits:
+	A: unsigned int (size = 4, offset = 0)
+	B: unsigned int (size = 4, offset = 4)
+	Last: unsigned short (size = 2, offset = 8)
+struct BitsAnchor:
+	Mode: struct BitsWide (size = 4, offset = 0)
+	Wide: long long (size = 8, offset = 8)
+	Low: unsigned int (size = 4, offset = 16)
+	High: unsigned int (size = 4, offset = 16)
+struct BitsOuter:
+	Kind: unsigned char (size = 1, offset = 0)
+	Inner: struct BitsWide (size = 4, offset = 4)
+	Low: unsigned short (size = 2, offset = 8)
+	Tail: unsigned int (size = 4, offset = 12)
+struct BitsRow:
+	Items: struct BitsWide [3] (size = 12, offset = 0)
+	Mark: unsigned char (size = 1, offset = 12)
+	Tail: unsigned int (size = 4, offset = 16)
 EOF
 RUN
 

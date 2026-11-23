@@ -44,7 +44,7 @@ Datatype *RizinTypeFactory::addRizinStruct(RzBaseType *type, StackTypes &stack_t
 		ut64 layout_size = type->size / 8;
 		bool has_layout = layout_size != 0 && layout_size <= (ut64)std::numeric_limits<int4>::max();
 		ut64 layout_end = 0;
-		std::vector<ut64> layout_offsets;
+		std::vector<TypeField> layout_fields;
 		rz_vector_foreach_cpp<RzTypeStructMember>(&type->struct_data.members, [&](RzTypeStructMember *member) {
 			if(!member->type || !member->name)
 				return;
@@ -71,11 +71,13 @@ Datatype *RizinTypeFactory::addRizinStruct(RzBaseType *type, StackTypes &stack_t
 			fields.push_back(tf);
 
 			ut64 member_size = (ut64)member_type->getSize();
-			if(member->offset < layout_end || member->offset > layout_size || member_size > layout_size - member->offset)
+			if(member->size == 0 && (member->offset < layout_end || member->offset > layout_size || member_size > layout_size - member->offset))
 				has_layout = false;
-			else
+			else if(member->size == 0)
+			{
 				layout_end = member->offset + member_size;
-			layout_offsets.push_back(member->offset);
+				layout_fields.push_back({(int4)member->offset, (int4)member->offset, std::string(member->name), member_type});
+			}
 
 			// TODO: right now, we track member offset ourselves
 			// which means all structs are assumed to be packed.
@@ -85,13 +87,8 @@ Datatype *RizinTypeFactory::addRizinStruct(RzBaseType *type, StackTypes &stack_t
 		});
 		std::vector<TypeBitField> bitfields;
 		int4 align = 1; // TODO: take this from rizin if available in the future
-		for(size_t i = 0; has_layout && i < fields.size(); i++)
-		{
-			fields[i].ident = (int4)layout_offsets[i];
-			fields[i].offset = (int4)layout_offsets[i];
-		}
 		int4 size = has_layout ? (int4)layout_size : (int4)(offset + rz_num_align_delta(offset, align));
-		setFields(fields, bitfields, r, size, align, 0);
+		setFields(has_layout ? layout_fields : fields, bitfields, r, size, align, 0);
 		return r;
 	}
 
