@@ -6,6 +6,7 @@
 
 #include <varnode.hh>
 #include <architecture.hh>
+#include <expression.hh>
 
 #include <rz_core.h>
 
@@ -70,4 +71,17 @@ std::string RizinPrintC::genericFunctionName(const ghidra::Address &addr)
 		}
 	}
 	return PrintC::genericFunctionName(addr);
+}
+
+void RizinPrintC::emitBitFieldExpression(const PcodeOp *op)
+{
+	if(InsertExpression(op).isValid())
+	{
+		PrintC::emitBitFieldExpression(op);
+		return;
+	}
+	pushOp(&assignment, op);
+	pushSymbolDetail(op->getOut(), op, false);
+	opFunc(op);
+	recurse();
 }

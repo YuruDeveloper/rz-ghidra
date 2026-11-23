@@ -11,6 +11,7 @@ class RizinPrintC : public ghidra::PrintC
 	protected:
 		void pushUnnamedLocation(const ghidra::Address &addr, const ghidra::Varnode *vn,const ghidra::PcodeOp *op) override;
 		std::string genericFunctionName(const ghidra::Address &addr) override;
+		void emitBitFieldExpression(const ghidra::PcodeOp *op) override;
 
 	public:
 		explicit RizinPrintC(ghidra::Architecture *g, const std::string &nm = "c-language");

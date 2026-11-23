@@ -7,11 +7,27 @@
 #include <rz_core.h>
 #include <rz_type.h>
 
+#include <algorithm>
 #include <limits>
+#include <utility>
 
 #include "RizinUtils.h"
 
 using namespace ghidra;
+
+namespace
+{
+struct DatatypeFlags : public Datatype
+{
+	using Datatype::has_bitfields;
+};
+
+bool isBitFieldMetatype(type_metatype metatype)
+{
+	return metatype == TYPE_INT || metatype == TYPE_UINT || metatype == TYPE_BOOL || metatype == TYPE_ENUM_INT || metatype == TYPE_ENUM_UINT
+		|| metatype == TYPE_VOID || metatype == TYPE_UNKNOWN;
+}
+}
 
 RizinTypeFactory::RizinTypeFactory(RizinArchitecture *arch)
 	: TypeFactory(arch),
@@ -45,7 +61,12 @@ Datatype *RizinTypeFactory::addRizinStruct(RzBaseType *type, StackTypes &stack_t
 		bool has_layout = layout_size != 0 && layout_size <= (ut64)std::numeric_limits<int4>::max();
 		ut64 layout_end = 0;
 		std::vector<TypeField> layout_fields;
+		bool is_big_endian = arch->getDefaultDataSpace()->isBigEndian();
+		bool has_bit_positions = type->struct_data.members.elem_size == sizeof(RzTypeStructMember);
+		std::vector<std::pair<ut64, TypeBitField>> bit_members;
+		int4 member_index = -1;
 		rz_vector_foreach_cpp<RzTypeStructMember>(&type->struct_data.members, [&](RzTypeStructMember *member) {
+			member_index++;
 			if(!member->type || !member->name)
 				return;
 			Datatype *member_type = fromRzType(member->type, nullptr, &stack_types);
@@ -78,6 +99,18 @@ Datatype *RizinTypeFactory::addRizinStruct(RzBaseType *type, StackTypes &stack_t
 				layout_end = member->offset + member_size;
 				layout_fields.push_back({(int4)member->offset, (int4)member->offset, std::string(member->name), member_type});
 			}
+			else if(has_bit_positions && member->bit_end >= member->size && member->bit_end <= layout_size * 8
+				&& member->size <= member_size * 8 && isBitFieldMetatype(member_type->getMetatype()))
+			{
+				ut64 first_bit = member->bit_end - member->size;
+				int4 least_bit = (int4)(is_big_endian ? (8 - member->bit_end % 8) % 8 : first_bit % 8);
+				Datatype *bit_type = member_type->getMetatype() == TYPE_VOID ? getBase((int4)member_size, TYPE_UNKNOWN) : member_type;
+				TypeBitField bit_field(member_index, (int4)member->size, is_big_endian, std::string(member->name), bit_type);
+				bit_field.bits.byteOffset = (int4)(first_bit / 8);
+				bit_field.bits.leastSigBit = least_bit;
+				bit_field.bits.byteSize = (least_bit + (int4)member->size + 7) / 8;
+				bit_members.emplace_back(first_bit, bit_field);
+			}
 
 			// TODO: right now, we track member offset ourselves
 			// which means all structs are assumed to be packed.
@@ -86,9 +119,55 @@ Datatype *RizinTypeFactory::addRizinStruct(RzBaseType *type, StackTypes &stack_t
 			offset += packed_size > member_size ? packed_size : member_size;
 		});
 		std::vector<TypeBitField> bitfields;
+		if(has_layout)
+		{
+			std::stable_sort(bit_members.begin(), bit_members.end(), [](const std::pair<ut64, TypeBitField> &left, const std::pair<ut64, TypeBitField> &right) {
+				return left.first < right.first;
+			});
+			size_t plain_count = layout_fields.size();
+			ut64 used_bits_end = 0;
+			for(const std::pair<ut64, TypeBitField> &bit_member : bit_members)
+			{
+				const BitRange &bits = bit_member.second.bits;
+				bool overlaps = bit_member.first < used_bits_end;
+				for(size_t i = 0; i < plain_count && !overlaps; i++)
+				{
+					const TypeField &plain = layout_fields[i];
+					overlaps = plain.offset < bits.byteOffset + bits.byteSize && bits.byteOffset < plain.offset + plain.type->getSize();
+				}
+				if(overlaps)
+					continue;
+				used_bits_end = bit_member.first + (ut64)bits.numBits;
+				if(!bits.isByteRange())
+				{
+					bitfields.push_back(bit_member.second);
+					continue;
+				}
+				Datatype *whole_type = bit_member.second.type;
+				if(whole_type->getSize() != bits.byteSize)
+				{
+					type_metatype metatype = whole_type->getMetatype();
+					whole_type = getBase(bits.byteSize, metatype == TYPE_INT || metatype == TYPE_UINT ? metatype : TYPE_UNKNOWN);
+				}
+				layout_fields.push_back({bits.byteOffset, bits.byteOffset, bit_member.second.name, whole_type});
+			}
+			if(layout_fields.size() != plain_count)
+			{
+				std::stable_sort(layout_fields.begin(), layout_fields.end(), [](const TypeField &left, const TypeField &right) {
+					return left.offset < right.offset;
+				});
+			}
+		}
+		const std::vector<TypeField> &given_fields = has_layout ? layout_fields : fields;
+		uint4 flags = bitfields.empty() ? 0 : DatatypeFlags::has_bitfields;
+		for(const TypeField &given_field : given_fields)
+		{
+			if(given_field.type->hasBitfields())
+				flags |= DatatypeFlags::has_bitfields;
+		}
 		int4 align = 1; // TODO: take this from rizin if available in the future
 		int4 size = has_layout ? (int4)layout_size : (int4)(offset + rz_num_align_delta(offset, align));
-		setFields(has_layout ? layout_fields : fields, bitfields, r, size, align, 0);
+		setFields(given_fields, bitfields, r, size, align, flags);
 		return r;
 	}
 

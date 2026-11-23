@@ -4803,7 +4803,7 @@ void dbg.SetThings(unsigned int value)
 EOF
 RUN
 
-NAME=structure from DWARF 5 with bit-fields (letter 1359, the plugin gives only the other members to the decompiler)
+NAME=structure from DWARF 5 with bit-fields (letter 1359, the functions write the other members)
 FILE=bins/struct-bits.exe
 CMDS=<<EOF
 aaa
@@ -4920,6 +4920,237 @@ struct BitsRow:
 	Items: struct BitsWide [3] (size = 12, offset = 0)
 	Mark: unsigned char (size = 1, offset = 12)
 	Tail: unsigned int (size = 4, offset = 16)
+EOF
+RUN
+
+NAME=names of bit-fields from DW_AT_data_bit_offset (letter 1385, GetNameLevel, SetNamePart, SetNameGlobal and SumNameFlags do not show a name)
+FILE=bins/struct-bitnames.exe
+CMDS=<<EOF
+aaa
+pdg @ dbg.SetNameMode
+pdg @ dbg.GetNameCount
+pdg @ dbg.SetNameLevel
+pdg @ dbg.GetNameLevel
+pdg @ dbg.TestNameReady
+pdg @ dbg.SetNameLow
+pdg @ dbg.SetNameHigh
+pdg @ dbg.SetNameFlag
+pdg @ dbg.SetNameWhole
+pdg @ dbg.SetNamePart
+pdg @ dbg.SetNameInner
+pdg @ dbg.SetNameGlobal
+pdg @ dbg.SumNameFlags
+pdg @ dbg.SetNameBeyond
+pdg @ dbg.SetNameOverlap
+pdg @ dbg.SetNameOnPlain
+pdg @ dbg.SetNameLost
+EOF
+EXPECT=<<EOF
+
+// WARNING: [rz-ghidra] Failed to get address for var value
+
+void dbg.SetNameMode(NameFlags *flags)
+{
+    uint32_t in_EDX;
+    
+    // [00] -r-x section size 4096 named .text
+    flags->Mode = in_EDX;
+    return;
+}
+
+uint32_t dbg.GetNameCount(NameFlags *flags)
+{
+    return flags->Count;
+}
+
+void dbg.SetNameLevel(NameFlags *flags, int value)
+{
+    flags->Level = value;
+    flags->Tail = (unsigned int)value;
+    return;
+}
+
+int32_t dbg.GetNameLevel(NameFlags *flags)
+{
+    return (*(int32_t *)flags << 0xb) >> 0x1b;
+}
+
+void dbg.TestNameReady(NameFlags *flags, unsigned int value)
+{
+    if (flags->Ready != 0) {
+        flags->Tail = value;
+    }
+    return;
+}
+
+// WARNING: [rz-ghidra] Failed to get address for var value
+
+void dbg.SetNameLow(NameAnchor *anchor)
+{
+    uint32_t in_EDX;
+    
+    anchor->Low = in_EDX;
+    return;
+}
+
+void dbg.SetNameHigh(NameAnchor *anchor, long long value)
+{
+    anchor->Wide = value;
+    anchor->High = 5;
+    return;
+}
+
+void dbg.SetNameFlag(NameShare *share, unsigned int value)
+{
+    share->Flag = value;
+    share->Value = SUB42(value, 0);
+    return;
+}
+
+void dbg.SetNameWhole(NameWhole *whole, unsigned int value)
+{
+    whole->Whole = SUB42(value, 0);
+    whole->Rest = value;
+    return;
+}
+
+// WARNING: [rz-ghidra] Failed to get address for var value
+
+void dbg.SetNamePart(NameWhole *whole)
+{
+    undefined4 uVar1;
+    uint32_t in_EDX;
+    
+    uVar1 = INSERT(*whole, in_EDX, 0x10, 5);
+    whole->Whole = (int16_t)uVar1;
+    *(int16_t *)&whole->field_0x2 = SUB42(uVar1, 2);
+    return;
+}
+
+void dbg.SetNameInner(NameOuter *outer, unsigned int value)
+{
+    (outer->Inner).Mode = value;
+    outer->Tail = value;
+    return;
+}
+
+void dbg.SetNameGlobal(unsigned int value)
+{
+    NameGlobals[1]._0_4_ = INSERT(NameGlobals[1]._0_4_, value, 1, 3);
+    NameGlobals[1].Tail = value;
+    AfterNameGlobals = value;
+    return;
+}
+
+// WARNING: [rz-ghidra] Failed to get address for var flags
+
+int32_t dbg.SumNameFlags(uint64_t param_1)
+{
+    return ((uint32_t)param_1 >> 4 & 0xfff) + (int32_t)(param_1 >> 0x20) + ((uint32_t)(param_1 >> 1) & 7);
+}
+
+void dbg.SetNameBeyond(NameBeyond *beyond, unsigned int value)
+{
+    beyond->Keep = value;
+    beyond->Far = value;
+    beyond->Tail = value;
+    return;
+}
+
+void dbg.SetNameOverlap(NameOverlap *overlap, unsigned int value)
+{
+    overlap->First = value;
+    overlap->Second = value;
+    overlap->Tail = value;
+    return;
+}
+
+void dbg.SetNameOnPlain(NameOnPlain *plain, unsigned int value)
+{
+    plain->Bit = value;
+    plain->Tail = value;
+    return;
+}
+
+void dbg.SetNameLost(NameLost *lost, unsigned int value)
+{
+    lost->LostBit = value;
+    lost->KeptBit = value;
+    lost->Wide = (uint64_t)(uint32_t)value;
+    lost->Tail = value;
+    return;
+}
+EOF
+RUN
+
+NAME=names of bit-fields from DW_AT_byte_size and DW_AT_bit_offset (letter 1385, DWARF 2)
+FILE=bins/struct-bitnames-dwarf2.exe
+CMDS=<<EOF
+aaa
+pdg @ dbg.SetNameMode
+pdg @ dbg.GetNameCount
+pdg @ dbg.SetNameLevel
+pdg @ dbg.TestNameReady
+pdg @ dbg.SetNameLow
+pdg @ dbg.SetNameHigh
+pdg @ dbg.SetNameFlag
+pdg @ dbg.SetNameInner
+EOF
+EXPECT=<<EOF
+
+void dbg.SetNameMode(NameFlags *flags, unsigned int value)
+{
+    // [00] -r-x section size 4096 named .text
+    flags->Mode = value;
+    return;
+}
+
+uint32_t dbg.GetNameCount(NameFlags *flags)
+{
+    return flags->Count;
+}
+
+void dbg.SetNameLevel(NameFlags *flags, int value)
+{
+    flags->Level = value;
+    flags->Tail = (unsigned int)value;
+    return;
+}
+
+void dbg.TestNameReady(NameFlags *flags, unsigned int value)
+{
+    if (flags->Ready != 0) {
+        flags->Tail = value;
+    }
+    return;
+}
+
+void dbg.SetNameLow(NameAnchor *anchor, unsigned int value)
+{
+    anchor->Low = value;
+    return;
+}
+
+void dbg.SetNameHigh(NameAnchor *anchor, long long value)
+{
+    anchor->Wide = value;
+    anchor->High = 5;
+    return;
+}
+
+void dbg.SetNameFlag(NameShare *share, unsigned int value)
+{
+    share->Flag = value;
+    share->Value = SUB42(value, 0);
+    return;
+}
+
+void dbg.SetNameInner(NameOuter *outer, unsigned int value)
+{
+    (outer->Inner).Mode = value;
+    outer->Tail = value;
+    return;
+}
 EOF
 RUN
 
